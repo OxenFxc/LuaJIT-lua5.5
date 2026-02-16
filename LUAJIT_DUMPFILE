@@ -1,0 +1,142 @@
+---- TRACE 1 start verify_jit_loop.lua:5
+0009  ITERN    5   3   3
+0011  UCLO     2 => 0012
+---- TRACE 1 abort verify_jit_loop.lua:7 -- leaving loop in root trace
+
+---- TRACE 1 start verify_jit_loop.lua:5
+0009  ITERN    5   3   3
+0008  ADDVV    1   1   6
+0009  ITERN    5   3   3
+---- TRACE 1 IR
+0002 >  [31mtab[m SLOAD  #5    T
+0003 >  [35mint[m SLOAD  #6    TK
+0005    p64 CALLL  lj_vm_next  (0002 0003)
+0006  + [35mint[m HIOP   0005  0005
+0007 >+ [34mnum[m VLOAD  0005  #1
+0008 >+ [34mnum[m VLOAD  0005  #0
+0009 >  [34mnum[m SLOAD  #3    T
+0010  + [34mnum[m ADD    0009  0008
+0011 ------ LOOP ------------
+0013    p64 CALLL  lj_vm_next  (0002 0006)
+0014  + [35mint[m HIOP   0013  0013
+0015 >+ [34mnum[m VLOAD  0013  #1
+0016 >+ [34mnum[m VLOAD  0013  #0
+0017  + [34mnum[m ADD    0016  0010
+0018    [35mint[m PHI    0006  0014
+0019    [34mnum[m PHI    0010  0017
+0020    [34mnum[m PHI    0007  0015
+0021    [34mnum[m PHI    0008  0016
+---- TRACE 1 mcode 195
+564f7a4aff30  add rsp, -0x20
+564f7a4aff34  mov dword [r14-0xf40], 0x1
+564f7a4aff3f  mov rbx, rdx
+564f7a4aff42  rorx rdi, [rbx+0x18], 0x2f
+564f7a4aff49  cmp di, -0x0c
+564f7a4aff4d  jnz 0x564f7a4a0064	->1
+564f7a4aff53  shr rdi, 0x11
+564f7a4aff57  mov [rsp+0x18], rdi
+564f7a4aff5c  cmp dword [rbx+0x24], 0xfffe7fff
+564f7a4aff63  jnz 0x564f7a4a0064	->1
+564f7a4aff69  mov esi, [rbx+0x20]
+564f7a4aff6c  call 0x564f43a8849d	->lj_vm_next
+564f7a4aff71  cmp dword [rax+0xc], 0xfff90000
+564f7a4aff78  jnb 0x564f7a4a0064	->1
+564f7a4aff7e  movsd xmm6, [rax+0x8]
+564f7a4aff83  cmp dword [rax+0x4], 0xfff90000
+564f7a4aff8a  jnb 0x564f7a4a0064	->1
+564f7a4aff90  movsd xmm7, [rax]
+564f7a4aff94  cmp dword [rbx+0xc], 0xfff90000
+564f7a4aff9b  jnb 0x564f7a4a0068	->2
+564f7a4affa1  movsd xmm5, [rbx+0x8]
+564f7a4affa6  addsd xmm5, xmm7
+564f7a4affaa  movsd [rsp+0x10], xmm5
+->LOOP:
+564f7a4affb0  movsd [rsp+0x10], xmm5
+564f7a4affb6  mov rdi, [rsp+0x18]
+564f7a4affbb  mov ebp, edx
+564f7a4affbd  mov esi, ebp
+564f7a4affbf  call 0x564f43a8849d	->lj_vm_next
+564f7a4affc4  movsd xmm5, [rsp+0x10]
+564f7a4affca  cmp dword [rax+0xc], 0xfff90000
+564f7a4affd1  jnb 0x564f7a4a0070	->4
+564f7a4affd7  movsd xmm6, [rax+0x8]
+564f7a4affdc  cmp dword [rax+0x4], 0xfff90000
+564f7a4affe3  jnb 0x564f7a4a0070	->4
+564f7a4affe9  movsd xmm7, [rax]
+564f7a4affed  addsd xmm5, xmm7
+564f7a4afff1  jmp 0x564f7a4affb0	->LOOP
+---- TRACE 1 stop -> loop
+
+---- TRACE 2 start 1/4 verify_jit_loop.lua:5
+0009  ITERN    5   3   3
+0011  UCLO     2 => 0012
+---- TRACE 2 abort verify_jit_loop.lua:7 -- NYI: bytecode UCLO
+
+---- TRACE 2 start 1/4 verify_jit_loop.lua:5
+0009  ITERN    5   3   3
+0011  UCLO     2 => 0012
+---- TRACE 2 abort verify_jit_loop.lua:7 -- NYI: bytecode UCLO
+
+---- TRACE 2 start 1/4 verify_jit_loop.lua:5
+0009  ITERN    5   3   3
+0011  UCLO     2 => 0012
+---- TRACE 2 abort verify_jit_loop.lua:7 -- NYI: bytecode UCLO
+
+---- TRACE 2 start 1/4 verify_jit_loop.lua:5
+0009  ITERN    5   3   3
+0011  UCLO     2 => 0012
+---- TRACE 2 abort verify_jit_loop.lua:7 -- NYI: bytecode UCLO
+
+---- TRACE 2 start 1/4 verify_jit_loop.lua:5
+---- TRACE 2 IR
+0001    [34mnum[m SLOAD  #3    PI
+0002    [35mint[m SLOAD  #6    PIK
+0004 >  [31mtab[m SLOAD  #5    T
+0006    p64 CALLL  lj_vm_next  (0004 0002)
+0007    [35mint[m HIOP   0006  0006
+0008 >  nil VLOAD  0006  #1
+---- TRACE 2 mcode 89
+564f7a4afed3  mov dword [r14-0xf40], 0x2
+564f7a4afede  mov rdx, rbx
+564f7a4afee1  rorx rdi, [rdx+0x18], 0x2f
+564f7a4afee8  cmp di, -0x0c
+564f7a4afeec  jnz 0x564f7a4a0064	->1
+564f7a4afef2  shr rdi, 0x11
+564f7a4afef6  mov esi, ebp
+564f7a4afef8  call 0x564f43a8849d	->lj_vm_next
+564f7a4afefd  mov rdx, [r14-0xe78]
+564f7a4aff04  movsd xmm7, [rsp+0x10]
+564f7a4aff0a  cmp qword [rax+0x8], -0x01
+564f7a4aff0f  jnz 0x564f7a4a0064	->1
+564f7a4aff15  movsd [rdx+0x8], xmm7
+564f7a4aff1a  xor eax, eax
+564f7a4aff1c  lea rbx, [r14+0x2ed4c]
+564f7a4aff23  add rsp, +0x20
+564f7a4aff27  jmp 0x564f43a880fc
+---- TRACE 2 stop -> interpreter
+
+---- TRACE 3 start verify_jit_loop.lua:44
+0014  MOV      6   0
+0015  CALL     6   1   1
+0000  . FUNCF    9          ; verify_jit_loop.lua:2
+0001  . TDUP     0   0
+0002  . KSHORT   1   0
+0003  . GGET     2   1      ; "pairs"
+0004  . MOV      4   0
+0005  . CALL     2   4   2
+0000  . . FUNCC               ; pairs
+0006  . TBC      2
+---- TRACE 3 abort verify_jit_loop.lua:5 -- NYI: bytecode TBC
+
+---- TRACE 3 start verify_jit_loop.lua:44
+0014  MOV      6   0
+0015  CALL     6   1   1
+0000  . FUNCF    9          ; verify_jit_loop.lua:2
+0001  . TDUP     0   0
+0002  . KSHORT   1   0
+0003  . GGET     2   1      ; "pairs"
+0004  . MOV      4   0
+0005  . CALL     2   4   2
+0000  . . FUNCC               ; pairs
+0006  . TBC      2
+---- TRACE 3 abort verify_jit_loop.lua:5 -- NYI: bytecode TBC
