@@ -422,6 +422,7 @@ int lj_lex_setup(lua_State *L, LexState *ls)
   ls->lastline = 1;
   ls->endmark = 0;
   ls->fr2 = LJ_FR2;  /* Generate native bytecode by default. */
+  ls->envn = lj_str_newlit(L, "_ENV");  /* Initialize environment variable name. */
   lex_next(ls);  /* Read-ahead first char. */
   if (ls->c == 0xef && ls->p + 2 <= ls->pe && (uint8_t)ls->p[0] == 0xbb &&
       (uint8_t)ls->p[1] == 0xbf) {  /* Skip UTF-8 BOM (if buffered). */
@@ -522,5 +523,6 @@ void lj_lex_init(lua_State *L)
     fixstring(s);  /* Reserved words are never collected. */
     s->reserved = (uint8_t)(i+1);
   }
+  fixstring(lj_str_newlit(L, "_ENV"));  /* Fix _ENV string. */
 }
 

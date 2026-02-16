@@ -1280,9 +1280,9 @@ static MSize var_lookup_(FuncState *fs, LexState *ls, GCstr *name, ExpDesc *e, i
       }
     }
   } else {  /* Not found in any function, must be a global. */
-    if (!(name->len == 4 && strcmp(strdata(name), "_ENV") == 0)) {
+    if (name != ls->envn) {
       ExpDesc env;
-      if ((int32_t)var_lookup_(ls->fs, ls, lj_str_newlit(ls->L, "_ENV"), &env, VARLOOKUP_FIRST|VARLOOKUP_NOERR) >= 0) {
+      if ((int32_t)var_lookup_(ls->fs, ls, ls->envn, &env, VARLOOKUP_FIRST|VARLOOKUP_NOERR) >= 0) {
 	ExpDesc key;
 	expr_init(&key, VKSTR, 0);
 	key.u.sval = name;
@@ -2150,7 +2150,12 @@ static void expr_primary(LexState *ls, ExpDesc *v)
     lex_match(ls, ')', '(', line);
     expr_discharge(ls->fs, v);
   } else if (ls->tok == TK_name || (!LJ_52 && ls->tok == TK_goto)) {
-    var_lookup(ls, v);
+    GCstr *name = strV(&ls->tokval);
+    /* Anchor string to prevent GC during lex_next */
+    TValue *tv = lj_tab_setstr(ls->L, ls->fs->kt, name);
+    if (tvisnil(tv)) setboolV(tv, 1);
+    lj_lex_next(ls);
+    var_lookup_(ls->fs, ls, name, v, VARLOOKUP_FIRST);
   } else {
     err_syntax(ls, LJ_ERR_XSYMBOL);
   }
@@ -2463,7 +2468,7 @@ static void parse_global(LexState *ls)
     if ((int32_t)var_lookup_local(ls->fs, name) >= 0)
       lj_lex_error(ls, 0, LJ_ERR_XDUPVAR, strdata(name));
     gvar_new(ls, name, 0);
-    if ((int32_t)var_lookup_(ls->fs, ls, lj_str_newlit(ls->L, "_ENV"), &env, VARLOOKUP_FIRST|VARLOOKUP_NOERR) >= 0) {
+    if ((int32_t)var_lookup_(ls->fs, ls, ls->envn, &env, VARLOOKUP_FIRST|VARLOOKUP_NOERR) >= 0) {
       ExpDesc key;
       expr_init(&key, VKSTR, 0);
       key.u.sval = name;
@@ -2505,7 +2510,7 @@ static void parse_global(LexState *ls)
 	BCReg base = ls->fs->freereg - nvars;
 	for (i = 0; i < nvars; i++) {
 	  ExpDesc v, rhs, env;
-	  if ((int32_t)var_lookup_(ls->fs, ls, lj_str_newlit(ls->L, "_ENV"), &env, VARLOOKUP_FIRST|VARLOOKUP_NOERR) >= 0) {
+	  if ((int32_t)var_lookup_(ls->fs, ls, ls->envn, &env, VARLOOKUP_FIRST|VARLOOKUP_NOERR) >= 0) {
 	    ExpDesc key;
 	    expr_init(&key, VKSTR, 0);
 	    key.u.sval = strref(ls->gstack[gbase+i].name);
