@@ -559,6 +559,7 @@ enum {
   _(lt) _(le) _(concat) _(call) \
   /* The following must be in ORDER ARITH. */ \
   _(add) _(sub) _(mul) _(div) _(mod) _(pow) _(unm) \
+  _(idiv) _(band) _(bor) _(bxor) _(shl) _(shr) _(bnot) \
   /* The following are used in the standard libraries. */ \
   _(metatable) _(tostring) MMDEF_FFI(_) MMDEF_PAIRS(_)
 
@@ -660,6 +661,8 @@ typedef struct global_State {
   MRef jit_base;	/* Current JIT code L->base or NULL. */
   MRef ctype_state;	/* Pointer to C type state. */
   PRNGState prng;	/* Global PRNG state. */
+  lua_WarnFunction warnf;	/* Warning handler. */
+  void *ud_warn;	/* Warning handler data. */
   GCRef gcroot[GCROOT_MAX];  /* GC roots. */
 } global_State;
 

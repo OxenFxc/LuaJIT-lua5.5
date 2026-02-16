@@ -9,6 +9,7 @@
 ERRDEF(ERRMEM,	"not enough memory")
 ERRDEF(ERRERR,	"error in error handling")
 ERRDEF(ERRCPP,	"C++ exception")
+ERRDEF(DIV0,	"attempt to divide by zero")
 
 /* Allocations. */
 ERRDEF(STROV,	"string length overflow")
