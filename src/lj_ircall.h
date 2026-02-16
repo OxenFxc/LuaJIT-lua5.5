@@ -193,6 +193,8 @@ typedef struct CCallInfo {
   _(ANY,	lj_tab_len_hint,	2,  FL, INT, 0) \
   _(ANY,	lj_gc_step_jit,		2,  FS, NIL, CCI_L) \
   _(ANY,	lj_gc_barrieruv,	2,  FS, NIL, 0) \
+  _(ANY,	lj_func_newtbc,		2,  FS, NIL, CCI_L|CCI_T) \
+  _(ANY,	lj_func_closeuv,	2,  FS, NIL, CCI_L|CCI_T) \
   _(ANY,	lj_mem_newgco,		2,  FA, PGC, CCI_L|CCI_T) \
   _(ANY,	lj_prng_u64d,		1,  FS, NUM, CCI_CASTU64) \
   _(ANY,	lj_vm_modi,		2,  FN, INT, 0) \
