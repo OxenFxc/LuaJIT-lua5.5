@@ -1218,7 +1218,10 @@ static void gvar_new(LexState *ls, GCstr *name, uint8_t info)
     lj_mem_growvec(ls->L, ls->gstack, ls->sizegstack, LJ_MAX_VSTACK, GlobalInfo);
   }
   /* NOBARRIER: name is anchored in fs->kt and ls->gstack is not a GCobj. */
-  setgcref(ls->gstack[gtop].name, obj2gco(name));
+  if (name)
+    setgcref(ls->gstack[gtop].name, obj2gco(name));
+  else
+    setgcrefnull(ls->gstack[gtop].name);
   ls->gstack[gtop].info = info;
   ls->gtop = gtop+1;
 }
@@ -2454,8 +2457,10 @@ static void parse_global(LexState *ls)
     ExpDesc e;
     BCReg nexps, nvars = 0;
     uint8_t flags[LJ_MAX_LOCVAR];
+    uint8_t pflags = parse_attribs_flags(ls);
+    if (pflags & VSTACK_CLOSE) err_syntax(ls, LJ_ERR_XSYNTAX);
     if (lex_opt(ls, '*')) {
-      gvar_new(ls, NULL, 0);
+      gvar_new(ls, NULL, pflags);
       return;
     }
     MSize gbase = ls->gtop;
@@ -2464,7 +2469,9 @@ static void parse_global(LexState *ls)
       if ((int32_t)var_lookup_local(ls->fs, name) >= 0)
 	lj_lex_error(ls, 0, LJ_ERR_XDUPVAR, strdata(name));
       checklimit(ls->fs, nvars, LJ_MAX_LOCVAR, "variable names");
-      flags[nvars++] = parse_attribs_flags(ls) | VSTACK_PENDING_CONST;
+      flags[nvars] = pflags | parse_attribs_flags(ls);
+      if (flags[nvars] & VSTACK_CLOSE) err_syntax(ls, LJ_ERR_XSYNTAX);
+      flags[nvars++] |= VSTACK_PENDING_CONST;
       gvar_new(ls, name, 0);
     } while (lex_opt(ls, ','));
     if (lex_opt(ls, '=')) {  /* Optional RHS. */
@@ -2515,11 +2522,13 @@ static void parse_local(LexState *ls)
   } else {  /* Local variable declaration. */
     ExpDesc e;
     BCReg nexps, nvars = 0;
+    uint8_t flags = parse_attribs_flags(ls);
     do {  /* Collect LHS. */
       GCstr *name = lex_str(ls);
       if (gvar_lookup(ls->fs, name))
 	lj_lex_error(ls, 0, LJ_ERR_XDUPVAR, strdata(name));
       var_new(ls, nvars++, name);
+      ls->vstack[ls->vtop-1].info |= flags;
       parse_attribs(ls);
     } while (lex_opt(ls, ','));
     if (lex_opt(ls, '=')) {  /* Optional RHS. */
