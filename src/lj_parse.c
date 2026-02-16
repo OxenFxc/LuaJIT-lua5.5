@@ -2879,6 +2879,7 @@ static void parse_for_iter(LexState *ls, GCstr *indexname, uint8_t flags)
   int isnext;
   /* Hidden control variables. */
   var_new_fixed(ls, nvars++, VARNAME_FOR_GEN);
+  ls->vstack[ls->vtop-1].info |= VSTACK_CLOSE;  /* The iterator is to-be-closed. */
   var_new_fixed(ls, nvars++, VARNAME_FOR_STATE);
   var_new_fixed(ls, nvars++, VARNAME_FOR_CTL);
   /* Visible variables returned from iterator. */
@@ -2893,6 +2894,8 @@ static void parse_for_iter(LexState *ls, GCstr *indexname, uint8_t flags)
   assign_adjust(ls, 3, expr_list(ls, &e), &e);
   /* The iterator needs another 3 [4] slots (func [pc] | state ctl). */
   bcreg_bump(fs, 3+ls->fr2);
+  /* Emit BC_TBC for the iterator variable (1st hidden variable). */
+  bcemit_AD(fs, BC_TBC, fs->freereg - 3, 0);
   isnext = (nvars <= 5 && fs->pc > exprpc && predict_next(ls, fs, exprpc));
   var_add(ls, 3);  /* Hidden control variables. */
   lex_check(ls, TK_do);

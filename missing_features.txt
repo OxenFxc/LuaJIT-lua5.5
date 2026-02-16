@@ -1,0 +1,28 @@
+Missing Features (Lua 5.5 vs LuaJIT 2.1 custom):
+
+1. **Generic For Loop Iterator Closing**:
+   - Lua 5.4/5.5 uses 4 internal variables for generic for loops: (Iterator, State, Closing, Control).
+   - The "Closing" variable is used to support the `__close` metamethod on the iterator variable (the first return value of the iterator factory).
+   - LuaJIT currently uses 3 internal variables: (Generator, State, Control).
+   - **Impact**: Iterators with `__close` metamethods will not be closed if the loop breaks or errors, leading to resource leaks or incorrect behavior compared to Lua 5.4+.
+
+2. **Bitwise Operators and Integers**:
+   - Verify full support for Lua 5.3+ bitwise operators (`&`, `|`, `~`, `<<`, `>>`) and integer division (`//`).
+   - Lua 5.3 introduced a distinct integer subtype. LuaJIT has dual-number mode, but semantics for overflow/wrapping might differ.
+
+3. **String Formatting**:
+   - `%U` (Unicode code point) support in `string.format` (partially implemented in `utf8` library, but maybe not in core string lib).
+   - `%p` (pointer) behavior might differ.
+
+4. **Metamethods**:
+   - `__close` is supported for locals, but needs to be verified for upvalues and loop variables.
+   - `__gc` for tables (Lua 5.4 feature) might be missing (LuaJIT uses `newproxy` workaround usually).
+
+5. **API / Library**:
+   - `coroutine.close`.
+   - `math.type`.
+   - `string.pack` / `string.unpack`.
+
+**Priority for "Kernel" porting:**
+- Implement the **Generic For Loop Iterator Closing** mechanism in `src/lj_parse.c` and `src/lj_vm.dasc` (or interpreter loop).
+- Verify JIT compatibility (likely requires blacklisting JIT for such loops initially or implementing complex recording logic).
