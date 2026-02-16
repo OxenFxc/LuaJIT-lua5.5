@@ -2624,6 +2624,35 @@ static void build_subroutines(BuildCtx *ctx)
   |  subsd xmm0, xmm1
   |  ret
   |
+  |// FP integer division. Called by BC_IDIV* and vm_arith.
+  |->vm_idiv:
+  |  divsd xmm0, xmm1
+  |  jmp ->vm_floor
+  |
+  |// Bitwise helpers.
+  |.macro vm_bit, name, op, shift
+  |->name:
+  |  sseconst_tobit xmm2, RC
+  |  addsd xmm0, xmm2
+  |  addsd xmm1, xmm2
+  |  movd eax, xmm0
+  |  movd r8d, xmm1
+  |.if shift
+  |  mov ecx, r8d
+  |  op eax, cl
+  |.else
+  |  op eax, r8d
+  |.endif
+  |  cvtsi2sd xmm0, eax
+  |  ret
+  |.endmacro
+  |
+  |  vm_bit vm_bit_band, and, 0
+  |  vm_bit vm_bit_bor,  or,  0
+  |  vm_bit vm_bit_bxor, xor, 0
+  |  vm_bit vm_bit_shl,  shl, 1
+  |  vm_bit vm_bit_shr,  shr, 1
+  |
   |//-----------------------------------------------------------------------
   |//-- Number conversion functions ----------------------------------------
   |//-----------------------------------------------------------------------
@@ -3338,7 +3367,23 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     break;
 
   case BC_BNOT:
-    | int3
+    |  ins_AD	// RA = dst, RD = src
+    |  mov RB, [BASE+RD*8]
+    |.if DUALNUM
+    |  checkint RB, >1
+    |  not RBd
+    |  setint RB
+    |  mov [BASE+RA*8], RB
+    |  ins_next
+    |1:
+    |.endif
+    |  checknum RB, ->vmeta_unm
+    |  movsd xmm0, qword [BASE+RD*8]
+    |  call ->vm_tobit
+    |  not eax
+    |  cvtsi2sd xmm0, eax
+    |  movsd qword [BASE+RA*8], xmm0
+    |  ins_next
     break;
 
   /* -- Binary ops -------------------------------------------------------- */
@@ -3451,7 +3496,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  jmp ->BC_MODVN_Z			// Avoid 3 copies. It's slow anyway.
     break;
   case BC_IDIVVN: case BC_IDIVNV: case BC_IDIVVV:
-    | int3
+    |  ins_arithpre movsd, xmm1
+    |  call ->vm_idiv
+    |  ins_arithpost
+    |  ins_next
     break;
   case BC_POW:
     |  ins_arithpre movsd, xmm1
@@ -3485,12 +3533,60 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ins_next
     break;
 
+    |.macro ins_bitpre, base_op
+    |  ins_ABC
+    ||vk = op - base_op;
+    ||switch (vk) {
+    ||case 0:
+    |   checknumtp [BASE+RB*8], ->fff_fallback
+    |   movsd xmm0, qword [BASE+RB*8]
+    |   movsd xmm1, qword [KBASE+RC*8]
+    ||  break;
+    ||case 1:
+    |   checknumtp [BASE+RB*8], ->fff_fallback
+    |   movsd xmm0, qword [KBASE+RC*8]
+    |   movsd xmm1, qword [BASE+RB*8]
+    ||  break;
+    ||default:
+    |   checknumtp [BASE+RB*8], ->fff_fallback
+    |   checknumtp [BASE+RC*8], ->fff_fallback
+    |   movsd xmm0, qword [BASE+RB*8]
+    |   movsd xmm1, qword [BASE+RC*8]
+    ||  break;
+    ||}
+    |.endmacro
+
   case BC_BANDVN: case BC_BANDNV: case BC_BANDVV:
+    |  ins_bitpre BC_BANDVN
+    |  call ->vm_bit_band
+    |  ins_arithpost
+    |  ins_next
+    break;
   case BC_BORVN: case BC_BORNV: case BC_BORVV:
+    |  ins_bitpre BC_BORVN
+    |  call ->vm_bit_bor
+    |  ins_arithpost
+    |  ins_next
+    break;
   case BC_BXORVN: case BC_BXORNV: case BC_BXORVV:
+    |  ins_bitpre BC_BXORVN
+    |  call ->vm_bit_bxor
+    |  ins_arithpost
+    |  ins_next
+    break;
   case BC_SHLVN: case BC_SHLNV: case BC_SHLVV:
+    |  ins_bitpre BC_SHLVN
+    |  call ->vm_bit_shl
+    |  movzx RAd, PC_RA
+    |  ins_arithpost
+    |  ins_next
+    break;
   case BC_SHRVN: case BC_SHRNV: case BC_SHRVV:
-    | int3
+    |  ins_bitpre BC_SHRVN
+    |  call ->vm_bit_shr
+    |  movzx RAd, PC_RA
+    |  ins_arithpost
+    |  ins_next
     break;
 
   /* -- Constant ops ------------------------------------------------------ */

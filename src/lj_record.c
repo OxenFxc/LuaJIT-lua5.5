@@ -2166,6 +2166,19 @@ static TValue *rec_mm_concat_cp(lua_State *L, lua_CFunction dummy, void *ud)
   return NULL;
 }
 
+static TRef rec_bit(jit_State *J, TRef rb, TRef rc, IROp op)
+{
+  rb = lj_opt_narrow_tobit(J, rb);
+  rc = lj_opt_narrow_tobit(J, rc);
+  return emitir(IRTI(op), rb, rc);
+}
+
+static TRef rec_bit_unary(jit_State *J, TRef rc, IROp op)
+{
+  rc = lj_opt_narrow_tobit(J, rc);
+  return emitir(IRTI(op), rc, 0);
+}
+
 static TRef rec_cat(jit_State *J, BCReg baseslot, BCReg topslot)
 {
   lua_State *L = J->L;
@@ -2449,6 +2462,10 @@ void lj_record_ins(jit_State *J)
     rc = tref_istruecond(rc) ? TREF_FALSE : TREF_TRUE;
     break;
 
+  case BC_BNOT:
+    rc = rec_bit_unary(J, rc, IR_BNOT);
+    break;
+
   case BC_LEN:
     if (tref_isstr(rc))
       rc = emitir(IRTI(IR_FLOAD), rc, IRFL_STR_LEN);
@@ -2498,6 +2515,13 @@ void lj_record_ins(jit_State *J)
       rc = rec_mm_arith(J, &ix, MM_mod);
     break;
 
+  case BC_IDIVVN: case BC_IDIVNV: case BC_IDIVVV:
+    if (tref_isnumber_str(rb) && tref_isnumber_str(rc))
+      rc = lj_opt_narrow_arith(J, rb, rc, rbv, rcv, IR_IDIV);
+    else
+      rc = rec_mm_arith(J, &ix, MM_idiv);
+    break;
+
   case BC_POW:
     if (tref_isnumber_str(rb) && tref_isnumber_str(rc))
       rc = lj_opt_narrow_arith(J, rb, rc, rbv, rcv, IR_POW);
@@ -2511,6 +2535,24 @@ void lj_record_ins(jit_State *J)
     rc = rec_cat(J, rb, rc);
     if (rc >= 0xffffff00)
       lj_err_throw(J->L, -(int32_t)rc);  /* Propagate errors. */
+    break;
+
+  /* -- Bitwise ops ------------------------------------------------------- */
+
+  case BC_BANDVN: case BC_BANDNV: case BC_BANDVV:
+    rc = rec_bit(J, rb, rc, IR_BAND);
+    break;
+  case BC_BORVN: case BC_BORNV: case BC_BORVV:
+    rc = rec_bit(J, rb, rc, IR_BOR);
+    break;
+  case BC_BXORVN: case BC_BXORNV: case BC_BXORVV:
+    rc = rec_bit(J, rb, rc, IR_BXOR);
+    break;
+  case BC_SHLVN: case BC_SHLNV: case BC_SHLVV:
+    rc = rec_bit(J, rb, rc, IR_BSHL);
+    break;
+  case BC_SHRVN: case BC_SHRNV: case BC_SHRVV:
+    rc = rec_bit(J, rb, rc, IR_BSHR);
     break;
 
   /* -- Constant and move ops --------------------------------------------- */
