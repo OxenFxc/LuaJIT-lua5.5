@@ -87,6 +87,9 @@ static LJ_AINLINE void expr_init(ExpDesc *e, ExpKind k, uint32_t info)
   e->f = e->t = NO_JMP;
 }
 
+/* Forward declarations. */
+static void parse_func(LexState *ls, BCLine line);
+
 /* Check number constant for +-0. */
 static int expr_numiszero(ExpDesc *e)
 {
@@ -98,6 +101,7 @@ static int expr_numiszero(ExpDesc *e)
 typedef struct FuncScope {
   struct FuncScope *prev;	/* Link to outer scope. */
   MSize vstart;			/* Start of block-local variables. */
+  MSize gstart;			/* Start of block-local global variables. */
   uint8_t nactvar;		/* Number of active vars outside the scope. */
   uint8_t flags;		/* Scope flags. */
 } FuncScope;
@@ -146,6 +150,9 @@ typedef struct FuncState {
   VarIndex uvmap[LJ_MAX_UPVAL];	/* Map from upvalue to variable idx. */
   VarIndex uvtmp[LJ_MAX_UPVAL];	/* Temporary upvalue map. */
 } FuncState;
+
+/* Forward declaration. */
+static GlobalInfo *gvar_lookup(FuncState *fs, GCstr *name);
 
 /* Binary and unary operators. ORDER OPR */
 typedef enum BinOpr {
@@ -651,6 +658,11 @@ static void bcemit_store(FuncState *fs, ExpDesc *var, ExpDesc *e)
     else
       ins = BCINS_AD(BC_USETV, var->u.s.info, expr_toanyreg(fs, e));
   } else if (var->k == VGLOBAL) {
+    GlobalInfo *gi = gvar_lookup(fs, var->u.sval);
+    if (gi && (gi->info & VSTACK_CONST)) {
+      GCstr *name = strref(gi->name);
+      lj_lex_error(fs->ls, 0, LJ_ERR_XCONST, strdata(name));
+    }
     BCReg ra = expr_toanyreg(fs, e);
     ins = BCINS_AD(BC_GSET, ra, const_str(fs, var));
   } else {
@@ -1196,6 +1208,31 @@ static BCReg var_lookup_local(FuncState *fs, GCstr *n)
   return (BCReg)-1;  /* Not found. */
 }
 
+/* Define a new global variable. */
+static void gvar_new(LexState *ls, GCstr *name, uint8_t info)
+{
+  MSize gtop = ls->gtop;
+  if (LJ_UNLIKELY(gtop >= ls->sizegstack)) {
+    lj_mem_growvec(ls->L, ls->gstack, ls->sizegstack, LJ_MAX_VSTACK, GlobalInfo);
+  }
+  /* NOBARRIER: name is anchored in fs->kt and ls->gstack is not a GCobj. */
+  setgcref(ls->gstack[gtop].name, obj2gco(name));
+  ls->gstack[gtop].info = info;
+  ls->gtop = gtop+1;
+}
+
+/* Lookup global variable name in the global stack. */
+static GlobalInfo *gvar_lookup(FuncState *fs, GCstr *name)
+{
+  LexState *ls = fs->ls;
+  int i;
+  for (i = (int)ls->gtop-1; i >= 0; i--) {
+    if (name == strref(ls->gstack[i].name))
+      return &ls->gstack[i];
+  }
+  return NULL;  /* Not found. */
+}
+
 /* Lookup or add upvalue index. */
 static MSize var_lookup_uv(FuncState *fs, MSize vidx, ExpDesc *e)
 {
@@ -1225,6 +1262,10 @@ static MSize var_lookup_(FuncState *fs, GCstr *name, ExpDesc *e, int first)
       if (!first)
 	fscope_uvmark(fs, reg);  /* Scope now has an upvalue. */
       return (MSize)(e->u.s.aux = (uint32_t)fs->varmap[reg]);
+    } else if (gvar_lookup(fs, name)) {
+      expr_init(e, VGLOBAL, 0);
+      e->u.sval = name;
+      return (MSize)-1;  /* Global. */
     } else {
       MSize vidx = var_lookup_(fs->prev, name, e, 0);  /* Var in outer func? */
       if ((int32_t)vidx >= 0) {  /* Yes, make it an upvalue here. */
@@ -1372,6 +1413,7 @@ static void fscope_begin(FuncState *fs, FuncScope *bl, int flags)
   bl->nactvar = (uint8_t)fs->nactvar;
   bl->flags = flags;
   bl->vstart = fs->ls->vtop;
+  bl->gstart = fs->ls->gtop;
   bl->prev = fs->bl;
   fs->bl = bl;
   lj_assertFS(fs->freereg == fs->nactvar, "bad regalloc");
@@ -1384,6 +1426,7 @@ static void fscope_end(FuncState *fs)
   LexState *ls = fs->ls;
   fs->bl = bl->prev;
   var_remove(ls, bl->nactvar);
+  ls->gtop = bl->gstart;
   fs->freereg = fs->nactvar;
   lj_assertFS(bl->nactvar == fs->nactvar, "bad regalloc");
   if ((bl->flags & (FSCOPE_UPVAL|FSCOPE_NOCLOSE)) == FSCOPE_UPVAL)
@@ -2377,13 +2420,68 @@ static void parse_call_assign(LexState *ls)
   }
 }
 
+#define VSTACK_PENDING_CONST	0x80
+
+/* Parse 'global' statement. */
+static void parse_global(LexState *ls)
+{
+  if (lex_opt(ls, TK_function)) {  /* Global function declaration. */
+    GCstr *name = lex_str(ls);
+    ExpDesc v, b;
+    if ((int32_t)var_lookup_local(ls->fs, name) >= 0)
+      lj_lex_error(ls, 0, LJ_ERR_XDUPVAR, strdata(name));
+    gvar_new(ls, name, 0);
+    expr_init(&v, VGLOBAL, 0);
+    v.u.sval = name;
+    parse_body(ls, &b, 0, ls->linenumber);
+    bcemit_store(ls->fs, &v, &b);
+  } else {  /* Global variable declaration. */
+    ExpDesc e;
+    BCReg nexps, nvars = 0;
+    uint8_t flags[LJ_MAX_LOCVAR];
+    MSize gbase = ls->gtop;
+    do {  /* Collect LHS. */
+      GCstr *name = lex_str(ls);
+      if ((int32_t)var_lookup_local(ls->fs, name) >= 0)
+	lj_lex_error(ls, 0, LJ_ERR_XDUPVAR, strdata(name));
+      checklimit(ls->fs, nvars, LJ_MAX_LOCVAR, "variable names");
+      flags[nvars++] = parse_attribs_flags(ls) | VSTACK_PENDING_CONST;
+      gvar_new(ls, name, 0);
+    } while (lex_opt(ls, ','));
+    if (lex_opt(ls, '=')) {  /* Optional RHS. */
+      nexps = expr_list(ls, &e);
+    } else {
+      e.k = VVOID;
+      nexps = 0;
+    }
+    assign_adjust(ls, nvars, nexps, &e);
+    /* Assign RHS to LHS. */
+    {
+      BCReg i;
+      BCReg base = ls->fs->freereg - nvars;
+      for (i = 0; i < nvars; i++) {
+	ExpDesc v, rhs;
+	expr_init(&v, VGLOBAL, 0);
+	v.u.sval = strref(ls->gstack[gbase+i].name);
+	expr_init(&rhs, VNONRELOC, base+i);
+	bcemit_store(ls->fs, &v, &rhs);
+	ls->gstack[gbase+i].info = flags[i] & ~VSTACK_PENDING_CONST;
+      }
+      ls->fs->freereg = base;
+    }
+  }
+}
+
 /* Parse 'local' statement. */
 static void parse_local(LexState *ls)
 {
   if (lex_opt(ls, TK_function)) {  /* Local function declaration. */
     ExpDesc v, b;
     FuncState *fs = ls->fs;
-    var_new(ls, 0, lex_str(ls));
+    GCstr *name = lex_str(ls);
+    if (gvar_lookup(fs, name))
+      lj_lex_error(ls, 0, LJ_ERR_XDUPVAR, strdata(name));
+    var_new(ls, 0, name);
     expr_init(&v, VLOCAL, fs->freereg);
     v.u.s.aux = fs->varmap[fs->freereg];
     bcreg_reserve(fs, 1);
@@ -2398,7 +2496,10 @@ static void parse_local(LexState *ls)
     ExpDesc e;
     BCReg nexps, nvars = 0;
     do {  /* Collect LHS. */
-      var_new(ls, nvars++, lex_str(ls));
+      GCstr *name = lex_str(ls);
+      if (gvar_lookup(ls->fs, name))
+	lj_lex_error(ls, 0, LJ_ERR_XDUPVAR, strdata(name));
+      var_new(ls, nvars++, name);
       parse_attribs(ls);
     } while (lex_opt(ls, ','));
     if (lex_opt(ls, '=')) {  /* Optional RHS. */
@@ -2833,6 +2934,18 @@ static int parse_stmt(LexState *ls)
       parse_goto(ls);
       break;
     }
+    /* fallthrough */
+  case TK_name: {
+    GCstr *s = strV(&ls->tokval);
+    if (s->len == 6 && !strcmp(strdata(s), "global")) {
+      LexToken lk = lj_lex_lookahead(ls);
+      if (lk == TK_function || lk == TK_name || lk == '<') {
+	lj_lex_next(ls);
+	parse_global(ls);
+	break;
+      }
+    }
+  }
     /* fallthrough */
   default:
     parse_call_assign(ls);

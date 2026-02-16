@@ -49,6 +49,12 @@ typedef struct VarInfo {
   uint8_t info;		/* Variable/goto/label info. */
 } VarInfo;
 
+/* Info for global variables. Only used during bytecode generation. */
+typedef struct GlobalInfo {
+  GCRef name;		/* Global variable name. */
+  uint8_t info;		/* Variable info. */
+} GlobalInfo;
+
 /* Lua lexer state. */
 typedef struct LexState {
   struct FuncState *fs;	/* Current FuncState. Defined in lj_parse.c. */
@@ -71,6 +77,9 @@ typedef struct LexState {
   VarInfo *vstack;	/* Stack for names and extents of local variables. */
   MSize sizevstack;	/* Size of variable stack. */
   MSize vtop;		/* Top of variable stack. */
+  GlobalInfo *gstack;	/* Stack for names of global variables. */
+  MSize sizegstack;	/* Size of global variable stack. */
+  MSize gtop;		/* Top of global variable stack. */
   BCInsLine *bcstack;	/* Stack for bytecode instructions/line numbers. */
   MSize sizebcstack;	/* Size of bytecode stack. */
   uint32_t level;	/* Syntactical nesting level. */
