@@ -214,6 +214,17 @@ LJLIB_CF(math_ult)
   return 1;
 }
 
+LJLIB_CF(math_type)
+{
+  if (L->base < L->top && tvisnumber(L->base)) {
+    lua_pushstring(L, tvisint(L->base) ? "integer" : "float");
+    return 1;
+  }
+  lj_lib_checkany(L, 1);
+  lua_pushnil(L);
+  return 1;
+}
+
 /* ------------------------------------------------------------------------ */
 
 #include "lj_libdef.h"
