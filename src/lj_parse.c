@@ -3098,6 +3098,9 @@ GCproto *lj_parse(LexState *ls)
   fs.bcbase = NULL;
   fs.bclim = 0;
   fs.flags |= PROTO_VARARG;  /* Main chunk is always a vararg func. */
+  var_new_lit(ls, 0, "_ENV");  /* Main chunk has _ENV as upvalue 0. */
+  fs.uvmap[0] = (uint16_t)(ls->vtop-1);
+  fs.nuv = 1;
   fscope_begin(&fs, &bl, 0);
   bcemit_AD(&fs, BC_FUNCV, 0, 0);  /* Placeholder. */
   lj_lex_next(ls);  /* Read-ahead first token. */
