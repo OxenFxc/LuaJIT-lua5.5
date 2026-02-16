@@ -97,7 +97,9 @@ LJ_DATADEF const char *lj_err_allmsg =
 /* Unwind Lua stack and move error message to new top. */
 LJ_NOINLINE static void unwindstack(lua_State *L, TValue *top)
 {
-  lj_func_closeuv(L, top);
+  ptrdiff_t top_ofs = savestack(L, top);
+  lj_func_closeuv_full(L, top, L->top-1);
+  top = restorestack(L, top_ofs);
   if (top < L->top-1) {
     copyTV(L, top, L->top-1);
     L->top = top+1;

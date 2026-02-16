@@ -563,7 +563,7 @@ enum {
   _(add) _(sub) _(mul) _(div) _(mod) _(pow) _(unm) \
   _(idiv) _(band) _(bor) _(bxor) _(shl) _(shr) _(bnot) \
   /* The following are used in the standard libraries. */ \
-  _(metatable) _(tostring) MMDEF_FFI(_) MMDEF_PAIRS(_)
+  _(metatable) _(tostring) MMDEF_FFI(_) MMDEF_PAIRS(_) _(close)
 
 typedef enum {
 #define MMENUM(name)	MM_##name,
