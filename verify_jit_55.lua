@@ -77,3 +77,26 @@ verify(codes[3] == 252, "utf8.codes 3") -- ü
 print("PASS: utf8 library")
 
 print("All tests passed (skipped failing ones)")
+
+-- Test 7: continue statement
+print("Test 7: continue statement")
+local sum = 0
+for i = 1, 10 do
+  if i % 2 == 0 then
+    continue
+  end
+  sum = sum + i
+end
+verify(sum == 25, "continue in for loop (sum of odds 1..10 is 25)")
+
+local i = 0
+sum = 0
+while i < 10 do
+  i = i + 1
+  if i % 2 == 0 then
+    continue
+  end
+  sum = sum + i
+end
+verify(sum == 25, "continue in while loop")
+print("PASS: continue statement")
