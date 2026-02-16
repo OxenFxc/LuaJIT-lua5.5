@@ -1649,9 +1649,24 @@ LUA_API int lua_isinteger(lua_State *L, int idx) {
     return lua_type(L, idx) == LUA_TNUMBER;
 }
 
-LUA_API int lua_closethread(lua_State *L, lua_State *from) {
-    UNUSED(L); UNUSED(from);
-    return 0;
+static int close_impl(lua_State *L)
+{
+  lj_func_closeuv(L, tvref(L->stack)+1+LJ_FR2);
+  return 0;
+}
+
+LUA_API int lua_closethread(lua_State *L, lua_State *from)
+{
+  int status;
+  UNUSED(from);
+  status = lua_cpcall(L, close_impl, NULL);
+  if (status == LUA_OK) {
+    L->base = tvref(L->stack) + 1 + LJ_FR2;
+    L->top = L->base;
+    L->status = LUA_OK;
+    L->cframe = NULL;
+  }
+  return status;
 }
 
 
