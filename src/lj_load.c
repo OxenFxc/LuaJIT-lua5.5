@@ -50,6 +50,10 @@ static TValue *cpparser(lua_State *L, lua_CFunction dummy, void *ud)
   pt = bc ? lj_bcread(ls) : lj_parse(ls);
   if (ls->fr2 == LJ_FR2) {
     fn = lj_func_newL_empty(L, pt, tabref(L->env));
+    if (pt->sizeuv == 1) {
+      GCupval *uv = gco2uv(gcref(fn->l.uvptr[0]));
+      settabV(L, uvval(uv), tabref(L->env));
+    }
     /* Don't combine above/below into one statement. */
     setfuncV(L, L->top++, fn);
   } else {
