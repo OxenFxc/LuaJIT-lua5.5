@@ -2613,6 +2613,7 @@ static void parse_for_num(LexState *ls, GCstr *varname, BCLine line, uint8_t fla
   BCReg base = fs->freereg;
   FuncScope bl;
   BCPos loop, loopend;
+  if (flags & VSTACK_CLOSE) err_syntax(ls, LJ_ERR_XSYNTAX);
   /* Hidden control variables. */
   var_new_fixed(ls, FORL_IDX, VARNAME_FOR_IDX);
   var_new_fixed(ls, FORL_STOP, VARNAME_FOR_STOP);

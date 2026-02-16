@@ -179,3 +179,26 @@ verify_for_generic_close()
 verify_for_generic_const()
 
 print("All verification tests passed!")
+
+local function verify_for_num_close()
+  print("Verifying numeric for <close> (should fail)...")
+  local code = [[
+    for x <close> = 1, 10 do
+      print(x)
+    end
+  ]]
+  local chunk, err = loadstring(code)
+  if chunk then
+    print("Warning: Compilation of numeric for with <close> succeeded (runtime check?)")
+    local ok, r_err = pcall(chunk)
+    if ok then
+       error("Numeric for loop with <close> should fail!")
+    else
+       print("Caught expected runtime error: " .. tostring(r_err))
+    end
+  else
+    print("Caught expected compile error: " .. tostring(err))
+  end
+end
+
+verify_for_num_close()

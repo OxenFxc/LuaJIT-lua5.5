@@ -1459,7 +1459,9 @@ LUA_API void lua_len(lua_State *L, int idx)
 
 LUA_API void lua_toclose(lua_State *L, int idx)
 {
-  UNUSED(L); UNUSED(idx);
+  TValue *o = index2adr(L, idx);
+  if (o >= tvref(L->stack) && o < tvref(L->maxstack))
+    lj_func_newtbc(L, o);
 }
 
 LUA_API void lua_closeslot(lua_State *L, int idx)
