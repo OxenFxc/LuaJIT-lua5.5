@@ -142,27 +142,37 @@ static void gc_mark_mmudata(global_State *g)
 size_t lj_gc_separateudata(global_State *g, int all)
 {
   size_t m = 0;
-  GCRef *p = &mainthread(g)->nextgc;
+  GCRef *p = &g->gc.root;
   GCobj *o;
   while ((o = gcref(*p)) != NULL) {
-    if (!(iswhite(o) || all) || isfinalized(gco2ud(o))) {
-      p = &o->gch.nextgc;  /* Nothing to do. */
-    } else if (!lj_meta_fastg(g, tabref(gco2ud(o)->metatable), MM_gc)) {
-      markfinalized(o);  /* Done, as there's no __gc metamethod. */
-      p = &o->gch.nextgc;
-    } else {  /* Otherwise move userdata to be finalized to mmudata list. */
-      m += sizeudata(gco2ud(o));
-      markfinalized(o);
-      *p = o->gch.nextgc;
-      if (gcref(g->gc.mmudata)) {  /* Link to end of mmudata list. */
-	GCobj *root = gcref(g->gc.mmudata);
-	setgcrefr(o->gch.nextgc, root->gch.nextgc);
-	setgcref(root->gch.nextgc, o);
-	setgcref(g->gc.mmudata, o);
-      } else {  /* Create circular list. */
-	setgcref(o->gch.nextgc, o);
-	setgcref(g->gc.mmudata, o);
+    int gct = o->gch.gct;
+    if ((gct == ~LJ_TUDATA || gct == ~LJ_TTAB) &&
+        ((iswhite(o) || all) && !isfinalized(&o->ud))) {
+      if (!lj_meta_fastg(g, tabref(((GChead *)o)->metatable), MM_gc)) {
+        markfinalized(o);  /* Done, as there's no __gc metamethod. */
+        p = &o->gch.nextgc;
+      } else {  /* Otherwise move userdata to be finalized to mmudata list. */
+        if (gct == ~LJ_TUDATA) {
+          m += sizeudata(&o->ud);
+        } else {
+          GCtab *t = &o->tab;
+          m += sizeof(GCtab) + sizeof(TValue) * t->asize +
+               (t->hmask ? sizeof(Node) * (t->hmask + 1) : 0);
+        }
+        markfinalized(o);
+        *p = o->gch.nextgc;
+        if (gcref(g->gc.mmudata)) {  /* Link to end of mmudata list. */
+          GCobj *root = gcref(g->gc.mmudata);
+          setgcrefr(o->gch.nextgc, root->gch.nextgc);
+          setgcref(root->gch.nextgc, o);
+          setgcref(g->gc.mmudata, o);
+        } else {  /* Create circular list. */
+          setgcref(o->gch.nextgc, o);
+          setgcref(g->gc.mmudata, o);
+        }
       }
+    } else {
+      p = &o->gch.nextgc;
     }
   }
   return m;
@@ -564,11 +574,11 @@ static void gc_finalize(lua_State *L)
   }
 #endif
   /* Add userdata back to the main userdata list and make it white. */
-  setgcrefr(o->gch.nextgc, mainthread(g)->nextgc);
-  setgcref(mainthread(g)->nextgc, o);
+  setgcrefr(o->gch.nextgc, g->gc.root);
+  setgcref(g->gc.root, o);
   makewhite(g, o);
   /* Resolve the __gc metamethod. */
-  mo = lj_meta_fastg(g, tabref(gco2ud(o)->metatable), MM_gc);
+  mo = lj_meta_fastg(g, tabref(((GChead *)o)->metatable), MM_gc);
   if (mo)
     gc_call_finalizer(g, L, mo, o);
 }
