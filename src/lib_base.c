@@ -553,6 +553,15 @@ LJLIB_CF(print)
   return 0;
 }
 
+LJLIB_CF(warn)
+{
+  int nargs = (int)(L->top - L->base);
+  luaL_checkstack(L, nargs, "too many arguments");
+  lua_concat(L, nargs);
+  lua_warning(L, lua_tostring(L, -1), 0);
+  return 0;
+}
+
 LJLIB_PUSH(top-3)
 LJLIB_SET(_VERSION)
 
@@ -606,6 +615,32 @@ LJLIB_CF(coroutine_create)
   L1 = lua_newthread(L);
   setfuncV(L, L1->top++, funcV(L->base));
   return 1;
+}
+
+LJLIB_CF(coroutine_close)
+{
+  lua_State *co;
+  int status;
+  if (!(L->top > L->base && tvisthread(L->base)))
+    lj_err_arg(L, 1, LJ_ERR_NOCORO);
+  co = threadV(L->base);
+  if (co == L)
+    lj_err_caller(L, LJ_ERR_CORUN);
+  if (co->status == LUA_OK && co->base > tvref(co->stack)+1+LJ_FR2)
+    lj_err_callermsg(L, "cannot close a normal coroutine");
+  status = lua_resetthread(co);
+  if (status == LUA_OK) {
+    setboolV(L->top++, 1);
+    return 1;
+  } else {
+    setboolV(L->top++, 0);
+    if (co->top > co->base) {
+       lua_xmove(co, L, 1);
+    } else {
+       setnilV(L->top++);
+    }
+    return 2;
+  }
 }
 
 LJLIB_ASM(coroutine_yield)
