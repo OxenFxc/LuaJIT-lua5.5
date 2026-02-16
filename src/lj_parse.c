@@ -155,6 +155,7 @@ typedef struct FuncState {
 
 /* Forward declaration. */
 static GlobalInfo *gvar_lookup(FuncState *fs, GCstr *name);
+static void expr_index(FuncState *fs, ExpDesc *t, ExpDesc *e);
 
 /* Binary and unary operators. ORDER OPR */
 typedef enum BinOpr {
@@ -1257,22 +1258,21 @@ static MSize var_lookup_uv(FuncState *fs, MSize vidx, ExpDesc *e)
 /* Forward declaration. */
 static void fscope_uvmark(FuncState *fs, BCReg level);
 
+#define VARLOOKUP_FIRST 1
+#define VARLOOKUP_NOERR 2
+
 /* Recursively lookup variables in enclosing functions. */
-static MSize var_lookup_(FuncState *fs, LexState *ls, GCstr *name, ExpDesc *e, int first)
+static MSize var_lookup_(FuncState *fs, LexState *ls, GCstr *name, ExpDesc *e, int flags)
 {
   if (fs) {
     BCReg reg = var_lookup_local(fs, name);
     if ((int32_t)reg >= 0) {  /* Local in this function? */
       expr_init(e, VLOCAL, reg);
-      if (!first)
+      if (!(flags & VARLOOKUP_FIRST))
 	fscope_uvmark(fs, reg);  /* Scope now has an upvalue. */
       return (MSize)(e->u.s.aux = (uint32_t)fs->varmap[reg]);
-    } else if (gvar_lookup(fs, name)) {
-      expr_init(e, VGLOBAL, 0);
-      e->u.sval = name;
-      return (MSize)-1;  /* Global. */
     } else {
-      MSize vidx = var_lookup_(fs->prev, ls, name, e, 0);  /* Var in outer func? */
+      MSize vidx = var_lookup_(fs->prev, ls, name, e, flags & ~VARLOOKUP_FIRST);  /* Var in outer func? */
       if ((int32_t)vidx >= 0) {  /* Yes, make it an upvalue here. */
 	e->u.s.info = (uint8_t)var_lookup_uv(fs, vidx, e);
 	e->k = VUPVAL;
@@ -1280,12 +1280,26 @@ static MSize var_lookup_(FuncState *fs, LexState *ls, GCstr *name, ExpDesc *e, i
       }
     }
   } else {  /* Not found in any function, must be a global. */
-    if (ls->gtop > 0) {
-      int i;
-      for (i = 0; i < (int)ls->gtop; i++) {
-	if (gcref(ls->gstack[i].name) == NULL) break;
+    if (!(name->len == 4 && strcmp(strdata(name), "_ENV") == 0)) {
+      ExpDesc env;
+      if ((int32_t)var_lookup_(ls->fs, ls, lj_str_newlit(ls->L, "_ENV"), &env, VARLOOKUP_FIRST|VARLOOKUP_NOERR) >= 0) {
+	ExpDesc key;
+	expr_init(&key, VKSTR, 0);
+	key.u.sval = name;
+	expr_index(ls->fs, &env, &key);
+	*e = env;
+	return (MSize)-1;
       }
-      if (i == (int)ls->gtop)
+    }
+    if (ls->gtop > 0 && !(flags & VARLOOKUP_NOERR)) {
+      int i;
+      for (i = (int)ls->gtop-1; i >= 0; i--) {
+        if (gcref(ls->gstack[i].name) != NULL && name == strref(ls->gstack[i].name))
+          break;
+        if (gcref(ls->gstack[i].name) == NULL)
+          break;
+      }
+      if (i < 0)
 	lj_lex_error(ls, 0, LJ_ERR_XDECL, strdata(name));
     }
     expr_init(e, VGLOBAL, 0);
@@ -1296,7 +1310,7 @@ static MSize var_lookup_(FuncState *fs, LexState *ls, GCstr *name, ExpDesc *e, i
 
 /* Lookup variable name. */
 #define var_lookup(ls, e) \
-  var_lookup_((ls)->fs, (ls), lex_str(ls), (e), 1)
+  var_lookup_((ls)->fs, (ls), lex_str(ls), (e), VARLOOKUP_FIRST)
 
 /* -- Goto an label handling ---------------------------------------------- */
 
@@ -2445,12 +2459,20 @@ static void parse_global(LexState *ls)
 {
   if (lex_opt(ls, TK_function)) {  /* Global function declaration. */
     GCstr *name = lex_str(ls);
-    ExpDesc v, b;
+    ExpDesc v, b, env;
     if ((int32_t)var_lookup_local(ls->fs, name) >= 0)
       lj_lex_error(ls, 0, LJ_ERR_XDUPVAR, strdata(name));
     gvar_new(ls, name, 0);
-    expr_init(&v, VGLOBAL, 0);
-    v.u.sval = name;
+    if ((int32_t)var_lookup_(ls->fs, ls, lj_str_newlit(ls->L, "_ENV"), &env, VARLOOKUP_FIRST|VARLOOKUP_NOERR) >= 0) {
+      ExpDesc key;
+      expr_init(&key, VKSTR, 0);
+      key.u.sval = name;
+      expr_index(ls->fs, &env, &key);
+      v = env;
+    } else {
+      expr_init(&v, VGLOBAL, 0);
+      v.u.sval = name;
+    }
     parse_body(ls, &b, 0, ls->linenumber);
     bcemit_store(ls->fs, &v, &b);
   } else {  /* Global variable declaration. */
@@ -2482,9 +2504,17 @@ static void parse_global(LexState *ls)
 	BCReg i;
 	BCReg base = ls->fs->freereg - nvars;
 	for (i = 0; i < nvars; i++) {
-	  ExpDesc v, rhs;
-	  expr_init(&v, VGLOBAL, 0);
-	  v.u.sval = strref(ls->gstack[gbase+i].name);
+	  ExpDesc v, rhs, env;
+	  if ((int32_t)var_lookup_(ls->fs, ls, lj_str_newlit(ls->L, "_ENV"), &env, VARLOOKUP_FIRST|VARLOOKUP_NOERR) >= 0) {
+	    ExpDesc key;
+	    expr_init(&key, VKSTR, 0);
+	    key.u.sval = strref(ls->gstack[gbase+i].name);
+	    expr_index(ls->fs, &env, &key);
+	    v = env;
+	  } else {
+	    expr_init(&v, VGLOBAL, 0);
+	    v.u.sval = strref(ls->gstack[gbase+i].name);
+	  }
 	  expr_init(&rhs, VNONRELOC, base+i);
 	  bcemit_store(ls->fs, &v, &rhs);
 	  ls->gstack[gbase+i].info = flags[i] & ~VSTACK_PENDING_CONST;
