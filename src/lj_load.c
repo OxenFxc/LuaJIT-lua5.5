@@ -76,9 +76,9 @@ LUA_API int lua_loadx(lua_State *L, lua_Reader reader, void *data,
 }
 
 LUA_API int lua_load(lua_State *L, lua_Reader reader, void *data,
-		     const char *chunkname)
+		     const char *chunkname, const char *mode)
 {
-  return lua_loadx(L, reader, data, chunkname, NULL);
+  return lua_loadx(L, reader, data, chunkname, mode);
 }
 
 typedef struct FileReaderCtx {
@@ -130,6 +130,7 @@ LUALIB_API int luaL_loadfilex(lua_State *L, const char *filename,
   return status;
 }
 
+#undef luaL_loadfile
 LUALIB_API int luaL_loadfile(lua_State *L, const char *filename)
 {
   return luaL_loadfilex(L, filename, NULL);
@@ -159,6 +160,7 @@ LUALIB_API int luaL_loadbufferx(lua_State *L, const char *buf, size_t size,
   return lua_loadx(L, reader_string, &ctx, name, mode);
 }
 
+#undef luaL_loadbuffer
 LUALIB_API int luaL_loadbuffer(lua_State *L, const char *buf, size_t size,
 			       const char *name)
 {
@@ -172,10 +174,11 @@ LUALIB_API int luaL_loadstring(lua_State *L, const char *s)
 
 /* -- Dump bytecode ------------------------------------------------------- */
 
-LUA_API int lua_dump(lua_State *L, lua_Writer writer, void *data)
+LUA_API int lua_dump(lua_State *L, lua_Writer writer, void *data, int strip)
 {
   cTValue *o = L->top-1;
   uint32_t flags = LJ_FR2*BCDUMP_F_FR2;  /* Default mode for legacy C API. */
+  if (strip) flags |= BCDUMP_F_STRIP;
   lj_checkapi(L->top > L->base, "top slot empty");
   if (tvisfunc(o) && isluafunc(funcV(o)))
     return lj_bcwrite(L, funcproto(funcV(o)), writer, data, flags);

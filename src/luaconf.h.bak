@@ -10,7 +10,6 @@
 #define WINVER 0x0501
 #endif
 #include <stddef.h>
-#include <limits.h>
 
 /* Default path for loading Lua and C modules with require(). */
 #if defined(_WIN32)
@@ -36,7 +35,7 @@
 #define LUA_LMULTILIB	"lib"
 #endif
 #define LUA_LROOT	"/usr/local"
-#define LUA_LUADIR	"/lua/5.5/"
+#define LUA_LUADIR	"/lua/5.1/"
 
 #ifdef LUA_ROOT
 #define LUA_JROOT	LUA_ROOT
@@ -105,10 +104,6 @@
 
 /* Note: changing the following defines breaks the Lua 5.1 ABI. */
 #define LUA_INTEGER	ptrdiff_t
-#define LUA_UNSIGNED	size_t
-#define LUA_KCONTEXT	ptrdiff_t
-#define LUAI_UACINT	LUA_INTEGER
-#define LUA_MAXINTEGER  ((LUA_INTEGER)(~(LUA_UNSIGNED)0 >> 1))
 #define LUA_IDSIZE	60	/* Size of lua_Debug.short_src. */
 /*
 ** Size of lauxlib and io.* on-stack buffers. Weird workaround to avoid using
@@ -144,7 +139,6 @@
 #endif
 
 #define LUALIB_API	LUA_API
-#define LUAMOD_API	LUA_API
 
 /* Compatibility support for assertions. */
 #if defined(LUA_USE_ASSERT) || defined(LUA_USE_APICHECK)
@@ -158,22 +152,5 @@
 #else
 #define luai_apicheck(L, o)	{ (void)L; }
 #endif
-
-#if !defined(luai_likely)
-#if defined(__GNUC__) && !defined(LUA_NOBUILTIN)
-#define luai_likely(x)		(__builtin_expect(((x) != 0), 1))
-#define luai_unlikely(x)	(__builtin_expect(((x) != 0), 0))
-#else
-#define luai_likely(x)		(x)
-#define luai_unlikely(x)	(x)
-#endif
-#endif
-
-#define LUAI_MAXALIGN  lua_Number n; double u; void *s; lua_Integer i; long l
-
-/* Lua 5.5 compatibility */
-#define LUA_GLOBALSINDEX	(-10002)
-#define LUA_ENVIRONINDEX	(-10001)
-#define luaL_optint		luaL_optinteger
 
 #endif
