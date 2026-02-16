@@ -2767,10 +2767,10 @@ static void parse_repeat(LexState *ls, BCLine line)
   lj_lex_next(ls);  /* Skip 'repeat'. */
   bcemit_AD(fs, BC_LOOP, fs->nactvar, 0);
   parse_chunk(ls);
-  if (bl1.flags & FSCOPE_CONTINUE) {
+  if (bl2.flags & FSCOPE_CONTINUE) {
     MSize idx = gola_new(ls, NAME_CONTINUE, VSTACK_LABEL, fs->pc);
     ls->vtop = idx;
-    gola_resolve(ls, &bl1, idx);
+    gola_resolve(ls, &bl2, idx);
   }
   lex_match(ls, TK_until, TK_repeat, line);
   condexit = expr_cond(ls);  /* Parse condition (still inside inner scope). */
@@ -2801,7 +2801,7 @@ static void parse_for_num(LexState *ls, GCstr *varname, BCLine line, uint8_t fla
   var_new_fixed(ls, FORL_STEP, VARNAME_FOR_STEP);
   /* Visible copy of index variable. */
   var_new(ls, FORL_EXT, varname);
-  ls->vstack[ls->vtop-1].info |= flags;
+  ls->vstack[ls->vtop-1].info |= (flags | VSTACK_CONST);
   lex_check(ls, '=');
   expr_next(ls);
   lex_check(ls, ',');
@@ -2885,7 +2885,7 @@ static void parse_for_iter(LexState *ls, GCstr *indexname, uint8_t flags)
   var_new_fixed(ls, nvars++, VARNAME_FOR_CTL);
   /* Visible variables returned from iterator. */
   var_new(ls, nvars++, indexname);
-  ls->vstack[ls->vtop-1].info |= flags;
+  ls->vstack[ls->vtop-1].info |= (flags | VSTACK_CONST);
   while (lex_opt(ls, ',')) {
     var_new(ls, nvars++, lex_str(ls));
     parse_attribs(ls);
