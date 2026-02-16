@@ -14,6 +14,9 @@
 #include "lj_func.h"
 #include "lj_trace.h"
 #include "lj_vm.h"
+#include "lj_meta.h"
+#include "lj_state.h"
+#include "lj_frame.h"
 
 /* -- Prototypes ---------------------------------------------------------- */
 
@@ -87,7 +90,7 @@ void LJ_FASTCALL lj_func_newtbc(lua_State *L, TValue *slot)
 }
 
 /* Close all open upvalues pointing to some stack level or above. */
-void LJ_FASTCALL lj_func_closeuv(lua_State *L, TValue *level)
+void LJ_FASTCALL lj_func_closeuv_full(lua_State *L, TValue *level, TValue *err)
 {
   GCupval *uv;
   global_State *g = G(L);
@@ -103,10 +106,32 @@ void LJ_FASTCALL lj_func_closeuv(lua_State *L, TValue *level)
       unlinkuv(g, uv);
       lj_gc_closeuv(g, uv);
       if (uv->immutable & LJ_UV_TBC) {
-	/* TODO: Call __close metamethod. */
+	cTValue *mo = lj_meta_lookup(L, &uv->tv, MM_close);
+	if (!tvisnil(mo)) {
+	  ptrdiff_t level_ofs = savestack(L, level);
+	  ptrdiff_t err_ofs = err ? savestack(L, err) : 0;
+	  TValue *top;
+	  lj_state_checkstack(L, 4);
+	  level = restorestack(L, level_ofs);
+	  if (err) err = restorestack(L, err_ofs);
+	  top = L->top;
+	  copyTV(L, top++, mo);
+#if LJ_FR2
+	  setnilV(top++);
+#endif
+	  copyTV(L, top++, &uv->tv);
+	  if (err) copyTV(L, top++, err); else setnilV(top++);
+	  L->top = top;
+	  lj_vm_call(L, top-2, 1);
+	}
       }
     }
   }
+}
+
+void LJ_FASTCALL lj_func_closeuv(lua_State *L, TValue *level)
+{
+  lj_func_closeuv_full(L, level, NULL);
 }
 
 void LJ_FASTCALL lj_func_freeuv(global_State *g, GCupval *uv)
