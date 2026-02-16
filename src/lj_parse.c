@@ -1473,7 +1473,7 @@ static void fscope_end(FuncState *fs)
       return;
     }
   }
-  if ((bl->flags & FSCOPE_GOLA)) {
+  if ((bl->flags & (FSCOPE_GOLA|FSCOPE_CONTINUE))) {
     gola_fixup(ls, bl);
   }
 }
