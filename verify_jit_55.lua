@@ -100,3 +100,58 @@ while i < 10 do
 end
 verify(sum == 25, "continue in while loop")
 print("PASS: continue statement")
+
+-- Test 8: Generic For Loop Iterator Closing
+print("Test 8: Generic For Loop Iterator Closing")
+local closed = false
+local mt = {
+  __close = function()
+    closed = true
+  end
+}
+
+local function iter()
+  local t = setmetatable({}, mt)
+  -- Return iterator, state, control, and the to-be-closed object
+  return function() return nil end, nil, nil, t
+end
+
+for k in iter() do
+end
+
+if closed then
+  print("PASS: Iterator closing variable was closed")
+else
+  print("FAIL: Iterator closing variable was NOT closed")
+end
+
+-- Test 9: JIT for Iterator Closing
+print("Test 9: JIT for Iterator Closing")
+local toclose_count = 0
+local mt_jit = {
+  __close = function()
+    toclose_count = toclose_count + 1
+  end
+}
+
+local function iter_jit()
+  local t = setmetatable({}, mt_jit)
+  return function(s, k)
+    if k == nil then return 1 end
+    if k >= 100 then return nil end
+    return k + 1
+  end, nil, nil, t
+end
+
+local sum = 0
+for i = 1, 100 do
+  for k in iter_jit() do
+    sum = sum + k
+  end
+end
+
+if toclose_count == 100 then
+  print("PASS: JIT for close counted correctly")
+else
+  print("FAIL: JIT for close count mismatch: " .. toclose_count)
+end

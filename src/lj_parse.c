@@ -2873,13 +2873,14 @@ static void parse_for_iter(LexState *ls, GCstr *indexname, uint8_t flags)
   ExpDesc e;
   BCReg nvars = 0;
   BCLine line;
-  BCReg base = fs->freereg + 3;
+  BCReg base = fs->freereg + 4;
   BCPos loop, loopend, exprpc = fs->pc;
   FuncScope bl;
   int isnext;
   /* Hidden control variables. */
+  var_new_fixed(ls, nvars++, VARNAME_FOR_CLOSE);
+  ls->vstack[ls->vtop-1].info |= VSTACK_CLOSE;  /* The closing value is to-be-closed. */
   var_new_fixed(ls, nvars++, VARNAME_FOR_GEN);
-  ls->vstack[ls->vtop-1].info |= VSTACK_CLOSE;  /* The iterator is to-be-closed. */
   var_new_fixed(ls, nvars++, VARNAME_FOR_STATE);
   var_new_fixed(ls, nvars++, VARNAME_FOR_CTL);
   /* Visible variables returned from iterator. */
@@ -2891,19 +2892,34 @@ static void parse_for_iter(LexState *ls, GCstr *indexname, uint8_t flags)
   }
   lex_check(ls, TK_in);
   line = ls->linenumber;
-  assign_adjust(ls, 3, expr_list(ls, &e), &e);
-  /* The iterator needs another 3 [4] slots (func [pc] | state ctl). */
-  bcreg_bump(fs, 3+ls->fr2);
-  /* Emit BC_TBC for the iterator variable (1st hidden variable). */
-  bcemit_AD(fs, BC_TBC, fs->freereg - 3, 0);
-  isnext = (nvars <= 5 && fs->pc > exprpc && predict_next(ls, fs, exprpc));
-  var_add(ls, 3);  /* Hidden control variables. */
+  assign_adjust(ls, 4, expr_list(ls, &e), &e);
+  /* The iterator needs another 4 [5] slots (close func [pc] | state ctl). */
+  bcreg_bump(fs, 4+ls->fr2);
+  /* Emit BC_TBC for the closing variable (1st hidden variable). */
+  bcemit_AD(fs, BC_TBC, fs->freereg - 4, 0);
+  /* Swap variables to match LuaJIT internal layout: CLOSE GEN STATE CTL -> GEN STATE CTL CLOSE.
+  ** explist returns: GEN STATE CTL CLOSE (f, s, c, cl) into slots 0, 1, 2, 3.
+  ** We want: CLOSE(0)=cl(3), GEN(1)=f(0), STATE(2)=s(1), CTL(3)=c(2).
+  */
+  {
+    BCReg b = fs->freereg - 4;
+    BCReg tmp = fs->freereg;
+    bcreg_reserve(fs, 1);
+    bcemit_AD(fs, BC_MOV, tmp, b+3);   /* tmp = cl */
+    bcemit_AD(fs, BC_MOV, b+3, b+2);   /* cl_slot = c */
+    bcemit_AD(fs, BC_MOV, b+2, b+1);   /* c_slot = s */
+    bcemit_AD(fs, BC_MOV, b+1, b);     /* s_slot = f */
+    bcemit_AD(fs, BC_MOV, b, tmp);     /* f_slot = cl */
+    bcreg_free(fs, tmp);
+  }
+  isnext = (nvars <= 6 && fs->pc > exprpc && predict_next(ls, fs, exprpc));
+  var_add(ls, 4);  /* Hidden control variables. */
   lex_check(ls, TK_do);
   loop = bcemit_AJ(fs, isnext ? BC_ISNEXT : BC_JMP, base, NO_JMP);
   fscope_begin(fs, &bl, 0);  /* Scope for visible variables. */
-  var_add(ls, nvars-3);
-  bcreg_reserve(fs, nvars-3);
-  emit_tbc(fs, nvars-3);
+  var_add(ls, nvars-4);
+  bcreg_reserve(fs, nvars-4);
+  emit_tbc(fs, nvars-4);
   parse_block(ls);
   fscope_end(fs);
   if (fs->bl->flags & FSCOPE_CONTINUE) {
@@ -2913,7 +2929,7 @@ static void parse_for_iter(LexState *ls, GCstr *indexname, uint8_t flags)
   }
   /* Perform loop inversion. Loop control instructions are at the end. */
   jmp_patchins(fs, loop, fs->pc);
-  bcemit_ABC(fs, isnext ? BC_ITERN : BC_ITERC, base, nvars-3+1, 2+1);
+  bcemit_ABC(fs, isnext ? BC_ITERN : BC_ITERC, base, nvars-4+1, 2+1);
   loopend = bcemit_AJ(fs, BC_ITERL, base, NO_JMP);
   fs->bcbase[loopend-1].line = line;  /* Fix line for control ins. */
   fs->bcbase[loopend].line = line;
