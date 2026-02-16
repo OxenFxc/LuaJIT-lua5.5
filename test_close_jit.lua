@@ -39,3 +39,27 @@ else
   -- os.exit(1)
 end
 print("Done")
+
+local function test_jit_error_in_close()
+  print("Testing JIT with error in __close...")
+  local mt = {
+    __close = function() error("close error") end
+  }
+  local count = 0
+  for i=1,100 do
+    local ok, err = pcall(function()
+        local x <close> = setmetatable({}, mt)
+    end)
+    if not ok and string.find(tostring(err), "close error") then
+        count = count + 1
+    else
+        print("Unexpected result:", ok, err)
+    end
+  end
+  print("Caught error count:", count)
+  if count ~= 100 then
+    error("Did not catch all close errors!")
+  end
+end
+
+test_jit_error_in_close()
