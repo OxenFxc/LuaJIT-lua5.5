@@ -2762,14 +2762,9 @@ void lj_record_ins(jit_State *J)
     break;
 
   case BC_TBC:
-    lj_ir_call(J, IRCALL_lj_func_newtbc,
-	       emitir(IRT(IR_ADD, IRT_PGC), REF_BASE, lj_ir_kintpgc(J, ra*8)));
-    break;
-
   case BC_UCLO:
-    lj_ir_call(J, IRCALL_lj_func_closeuv,
-	       emitir(IRT(IR_ADD, IRT_PGC), REF_BASE, lj_ir_kintpgc(J, ra*8)));
-    J->pc += bc_j(ins)+1;
+    setintV(&J->errinfo, (int32_t)op);
+    lj_trace_err_info(J, LJ_TRERR_NYIBC);
     break;
 
   default:
