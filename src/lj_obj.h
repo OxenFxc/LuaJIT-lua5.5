@@ -444,6 +444,8 @@ typedef struct GCupval {
   uint32_t dhash;	/* Disambiguation hash: dh1 != dh2 => cannot alias. */
 } GCupval;
 
+#define LJ_UV_TBC		0x02
+
 #define uvprev(uv_)	(&gcref((uv_)->prev)->uv)
 #define uvnext(uv_)	(&gcref((uv_)->next)->uv)
 #define uvval(uv_)	(mref((uv_)->v, TValue))

@@ -79,6 +79,13 @@ static GCupval *func_emptyuv(lua_State *L)
   return uv;
 }
 
+/* Create a new to-be-closed upvalue. */
+void LJ_FASTCALL lj_func_newtbc(lua_State *L, TValue *slot)
+{
+  GCupval *uv = func_finduv(L, slot);
+  uv->immutable |= LJ_UV_TBC;
+}
+
 /* Close all open upvalues pointing to some stack level or above. */
 void LJ_FASTCALL lj_func_closeuv(lua_State *L, TValue *level)
 {
@@ -95,6 +102,9 @@ void LJ_FASTCALL lj_func_closeuv(lua_State *L, TValue *level)
     } else {
       unlinkuv(g, uv);
       lj_gc_closeuv(g, uv);
+      if (uv->immutable & LJ_UV_TBC) {
+	/* TODO: Call __close metamethod. */
+      }
     }
   }
 }
