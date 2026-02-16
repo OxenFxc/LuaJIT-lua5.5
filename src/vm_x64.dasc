@@ -3762,6 +3762,17 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ins_next
     break;
 
+  case BC_TBC:
+    |  ins_AD	// RA = var, RD = unused
+    |  mov L:RB, SAVE_L
+    |  mov L:RB->base, BASE
+    |  lea CARG2, [BASE+RA*8]
+    |  mov L:CARG1, L:RB
+    |  call extern lj_func_newtbc  // (lua_State *L, TValue *slot)
+    |  mov BASE, L:RB->base
+    |  ins_next
+    break;
+
   case BC_FNEW:
     |  ins_AND	// RA = dst, RD = proto const (~) (holding function prototype)
     |  mov L:RB, SAVE_L

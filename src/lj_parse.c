@@ -2365,7 +2365,8 @@ static void parse_local(LexState *ls)
 	if (!strcmp(strdata(attr), "const")) {
 	  ls->vstack[ls->vtop-1].info |= VSTACK_CONST;
 	} else if (!strcmp(strdata(attr), "close")) {
-	  err_syntax(ls, LJ_ERR_XCLOSE);
+	  ls->vstack[ls->vtop-1].info |= (VSTACK_CLOSE|VSTACK_CONST);
+	  ls->fs->bl->flags |= FSCOPE_UPVAL;
 	} else {
 	  err_syntax(ls, LJ_ERR_XSYMBOL);
 	}
@@ -2387,6 +2388,15 @@ static void parse_local(LexState *ls)
     }
     assign_adjust(ls, nvars, nexps, &e);
     var_add(ls, nvars);
+    {
+      BCReg i;
+      for (i = 0; i < nvars; i++) {
+	BCReg reg = ls->fs->nactvar - nvars + i;
+	if (var_get(ls, ls->fs, reg).info & VSTACK_CLOSE) {
+	  bcemit_AD(ls->fs, BC_TBC, reg, 0);
+	}
+      }
+    }
   }
 }
 

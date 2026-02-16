@@ -12,6 +12,7 @@
 LJ_FUNC void LJ_FASTCALL lj_func_freeproto(global_State *g, GCproto *pt);
 
 /* Upvalues. */
+LJ_FUNCA void LJ_FASTCALL lj_func_newtbc(lua_State *L, TValue *slot);
 LJ_FUNCA void LJ_FASTCALL lj_func_closeuv(lua_State *L, TValue *level);
 LJ_FUNC void LJ_FASTCALL lj_func_freeuv(global_State *g, GCupval *uv);
 
