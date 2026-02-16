@@ -2249,6 +2249,32 @@ static void asm_mul(ASMState *as, IRIns *ir)
 
 #define asm_fpdiv(as, ir)	asm_fparith(as, ir, XO_DIVSD)
 
+static void asm_idiv(ASMState *as, IRIns *ir)
+{
+  if (irt_isnum(ir->t)) {
+    if (as->flags & JIT_F_SSE4_1) {
+      Reg dest = ra_dest(as, ir, RSET_FPR);
+      emit_i8(as, 0x09);  /* Round down. */
+      emit_mrm(as, XO_ROUNDSD, dest, dest);
+      if (LJ_64 && as->mcp[1] != (MCode)(XO_ROUNDSD >> 16)) {
+	as->mcp[0] = as->mcp[1]; as->mcp[1] = 0x0f;  /* Swap 0F and REX. */
+      }
+      *--as->mcp = 0x66;  /* 1st byte of ROUNDSD opcode. */
+      asm_fparith(as, ir, XO_DIVSD);
+    } else {
+      RegSet drop = RSET_RANGE(RID_XMM0, RID_XMM3+1)|RID2RSET(RID_EAX);
+      if (ra_hasreg(ir->r))
+	rset_clear(drop, ir->r);
+      ra_evictset(as, drop);
+      ra_destreg(as, ir, RID_XMM0);
+      emit_call(as, lj_vm_floor_sse);
+      asm_fparith(as, ir, XO_DIVSD);
+    }
+  } else {
+    lj_assertA(0, "unsupported integer IDIV");
+  }
+}
+
 static void asm_neg_not(ASMState *as, IRIns *ir, x86Group3 xg)
 {
   Reg dest = ra_dest(as, ir, RSET_GPR);

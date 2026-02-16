@@ -1825,6 +1825,7 @@ static void asm_ir(ASMState *as, IRIns *ir)
   case IR_SUB: asm_sub(as, ir); break;
   case IR_MUL: asm_mul(as, ir); break;
   case IR_MOD: asm_mod(as, ir); break;
+  case IR_IDIV: asm_idiv(as, ir); break;
   case IR_NEG: asm_neg(as, ir); break;
 #if LJ_SOFTFP32
   case IR_DIV: case IR_POW: case IR_ABS:
