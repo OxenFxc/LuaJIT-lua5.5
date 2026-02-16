@@ -2926,6 +2926,10 @@ static int parse_stmt(LexState *ls)
     lj_lex_next(ls);
     parse_local(ls);
     break;
+  case TK_global:
+    lj_lex_next(ls);
+    parse_global(ls);
+    break;
   case TK_return:
     parse_return(ls);
     return 1;  /* Must be last. */
@@ -2948,17 +2952,7 @@ static int parse_stmt(LexState *ls)
       break;
     }
     /* fallthrough */
-  case TK_name: {
-    GCstr *s = strV(&ls->tokval);
-    if (s->len == 6 && !strcmp(strdata(s), "global")) {
-      LexToken lk = lj_lex_lookahead(ls);
-      if (lk == TK_function || lk == TK_name || lk == '<' || lk == '*') {
-	lj_lex_next(ls);
-	parse_global(ls);
-	break;
-      }
-    }
-  }
+  case TK_name:
     /* fallthrough */
   default:
     parse_call_assign(ls);
