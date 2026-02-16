@@ -56,7 +56,7 @@ static TValue *index2adr(lua_State *L, int idx)
       settabV(L, o, tabref(fn->c.env));
       return o;
     } else {
-      idx = LUA_GLOBALSINDEX - idx;
+      idx = LUA_REGISTRYINDEX - idx;
       return idx <= fn->c.nupvalues ? &fn->c.upvalue[idx-1] : niltv(L);
     }
   }
