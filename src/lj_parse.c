@@ -2801,7 +2801,7 @@ static void parse_for_num(LexState *ls, GCstr *varname, BCLine line, uint8_t fla
   var_new_fixed(ls, FORL_STEP, VARNAME_FOR_STEP);
   /* Visible copy of index variable. */
   var_new(ls, FORL_EXT, varname);
-  ls->vstack[ls->vtop-1].info |= flags;
+  ls->vstack[ls->vtop-1].info |= (flags | VSTACK_CONST);
   lex_check(ls, '=');
   expr_next(ls);
   lex_check(ls, ',');
@@ -2883,7 +2883,7 @@ static void parse_for_iter(LexState *ls, GCstr *indexname, uint8_t flags)
   var_new_fixed(ls, nvars++, VARNAME_FOR_CTL);
   /* Visible variables returned from iterator. */
   var_new(ls, nvars++, indexname);
-  ls->vstack[ls->vtop-1].info |= flags;
+  ls->vstack[ls->vtop-1].info |= (flags | VSTACK_CONST);
   while (lex_opt(ls, ',')) {
     var_new(ls, nvars++, lex_str(ls));
     parse_attribs(ls);
