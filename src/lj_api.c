@@ -1659,16 +1659,26 @@ static int close_impl(lua_State *L)
 
 LUA_API int lua_closethread(lua_State *L, lua_State *from)
 {
-  int status;
+  int status = L->status;
+  int close_status;
   UNUSED(from);
-  status = lua_cpcall(L, close_impl, NULL);
-  if (status == LUA_OK) {
-    L->base = tvref(L->stack) + 1 + LJ_FR2;
+
+  L->status = LUA_OK;
+  L->cframe = NULL;
+
+  close_status = lua_cpcall(L, close_impl, NULL);
+
+  if (close_status == LUA_OK) {
+    TValue *st = tvref(L->stack);
+    L->base = L->top = st + 1 + LJ_FR2;
+    while (L->top < tvref(L->maxstack)) setnilV(L->top++);
     L->top = L->base;
     L->status = LUA_OK;
     L->cframe = NULL;
+    if (status == LUA_YIELD) return LUA_OK;
+    return status;
   }
-  return status;
+  return close_status;
 }
 
 
