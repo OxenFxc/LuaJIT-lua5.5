@@ -1172,6 +1172,7 @@ static void var_add(LexState *ls, BCReg nvars)
     v->startpc = fs->pc;
     v->slot = nactvar++;
     v->info &= (VSTACK_CONST|VSTACK_CLOSE);
+    if (v->info & VSTACK_CLOSE) fs->bl->flags |= FSCOPE_UPVAL;
   }
   fs->nactvar = nactvar;
 }
@@ -1898,6 +1899,44 @@ static void expr_table(LexState *ls, ExpDesc *e)
   }
 }
 
+/* Parse variable attributes and return flags. */
+static uint8_t parse_attribs_flags(LexState *ls)
+{
+  uint8_t flags = 0;
+  if (ls->tok == '<') {
+    GCstr *attr;
+    lj_lex_next(ls);
+    attr = lex_str(ls);
+    if (!strcmp(strdata(attr), "const")) {
+      flags |= VSTACK_CONST;
+    } else if (!strcmp(strdata(attr), "close")) {
+      flags |= (VSTACK_CLOSE|VSTACK_CONST);
+    } else {
+      err_syntax(ls, LJ_ERR_XSYMBOL);
+    }
+    lex_check(ls, '>');
+  }
+  return flags;
+}
+
+/* Parse variable attributes and apply to top variable. */
+static void parse_attribs(LexState *ls)
+{
+  ls->vstack[ls->vtop-1].info |= parse_attribs_flags(ls);
+}
+
+/* Emit BC_TBC for the last n active variables. */
+static void emit_tbc(FuncState *fs, BCReg n)
+{
+  BCReg i;
+  for (i = 0; i < n; i++) {
+    BCReg reg = fs->nactvar - n + i;
+    if (var_get(fs->ls, fs, reg).info & VSTACK_CLOSE) {
+      bcemit_AD(fs, BC_TBC, reg, 0);
+    }
+  }
+}
+
 /* Parse function parameters. */
 static BCReg parse_params(LexState *ls, int needself)
 {
@@ -1910,6 +1949,7 @@ static BCReg parse_params(LexState *ls, int needself)
     do {
       if (ls->tok == TK_name || (!LJ_52 && ls->tok == TK_goto)) {
 	var_new(ls, nparams++, lex_str(ls));
+	parse_attribs(ls);
       } else if (ls->tok == TK_dots) {
 	lj_lex_next(ls);
 	fs->flags |= PROTO_VARARG;
@@ -1943,6 +1983,7 @@ static void parse_body(LexState *ls, ExpDesc *e, int needself, BCLine line)
   fs.bcbase = pfs->bcbase + pfs->pc;
   fs.bclim = pfs->bclim - pfs->pc;
   bcemit_AD(&fs, BC_FUNCF, 0, 0);  /* Placeholder. */
+  emit_tbc(&fs, fs.numparams);
   parse_chunk(ls);
   if (ls->tok != TK_end) lex_match(ls, TK_end, TK_function, line);
   pt = fs_finish(ls, (ls->lastline = ls->linenumber));
@@ -2358,20 +2399,7 @@ static void parse_local(LexState *ls)
     BCReg nexps, nvars = 0;
     do {  /* Collect LHS. */
       var_new(ls, nvars++, lex_str(ls));
-      if (ls->tok == '<') {
-	GCstr *attr;
-	lj_lex_next(ls);
-	attr = lex_str(ls);
-	if (!strcmp(strdata(attr), "const")) {
-	  ls->vstack[ls->vtop-1].info |= VSTACK_CONST;
-	} else if (!strcmp(strdata(attr), "close")) {
-	  ls->vstack[ls->vtop-1].info |= (VSTACK_CLOSE|VSTACK_CONST);
-	  ls->fs->bl->flags |= FSCOPE_UPVAL;
-	} else {
-	  err_syntax(ls, LJ_ERR_XSYMBOL);
-	}
-	lex_check(ls, '>');
-      }
+      parse_attribs(ls);
     } while (lex_opt(ls, ','));
     if (lex_opt(ls, '=')) {  /* Optional RHS. */
       nexps = expr_list(ls, &e);
@@ -2388,15 +2416,7 @@ static void parse_local(LexState *ls)
     }
     assign_adjust(ls, nvars, nexps, &e);
     var_add(ls, nvars);
-    {
-      BCReg i;
-      for (i = 0; i < nvars; i++) {
-	BCReg reg = ls->fs->nactvar - nvars + i;
-	if (var_get(ls, ls->fs, reg).info & VSTACK_CLOSE) {
-	  bcemit_AD(ls->fs, BC_TBC, reg, 0);
-	}
-      }
-    }
+    emit_tbc(ls->fs, nvars);
   }
 }
 
@@ -2587,7 +2607,7 @@ static void parse_repeat(LexState *ls, BCLine line)
 }
 
 /* Parse numeric 'for'. */
-static void parse_for_num(LexState *ls, GCstr *varname, BCLine line)
+static void parse_for_num(LexState *ls, GCstr *varname, BCLine line, uint8_t flags)
 {
   FuncState *fs = ls->fs;
   BCReg base = fs->freereg;
@@ -2599,6 +2619,7 @@ static void parse_for_num(LexState *ls, GCstr *varname, BCLine line)
   var_new_fixed(ls, FORL_STEP, VARNAME_FOR_STEP);
   /* Visible copy of index variable. */
   var_new(ls, FORL_EXT, varname);
+  ls->vstack[ls->vtop-1].info |= flags;
   lex_check(ls, '=');
   expr_next(ls);
   lex_check(ls, ',');
@@ -2615,6 +2636,7 @@ static void parse_for_num(LexState *ls, GCstr *varname, BCLine line)
   fscope_begin(fs, &bl, 0);  /* Scope for visible variables. */
   var_add(ls, 1);
   bcreg_reserve(fs, 1);
+  emit_tbc(fs, 1);
   parse_block(ls);
   fscope_end(fs);
   /* Perform loop inversion. Loop control instructions are at the end. */
@@ -2658,7 +2680,7 @@ static int predict_next(LexState *ls, FuncState *fs, BCPos pc)
 }
 
 /* Parse 'for' iterator. */
-static void parse_for_iter(LexState *ls, GCstr *indexname)
+static void parse_for_iter(LexState *ls, GCstr *indexname, uint8_t flags)
 {
   FuncState *fs = ls->fs;
   ExpDesc e;
@@ -2674,8 +2696,11 @@ static void parse_for_iter(LexState *ls, GCstr *indexname)
   var_new_fixed(ls, nvars++, VARNAME_FOR_CTL);
   /* Visible variables returned from iterator. */
   var_new(ls, nvars++, indexname);
-  while (lex_opt(ls, ','))
+  ls->vstack[ls->vtop-1].info |= flags;
+  while (lex_opt(ls, ',')) {
     var_new(ls, nvars++, lex_str(ls));
+    parse_attribs(ls);
+  }
   lex_check(ls, TK_in);
   line = ls->linenumber;
   assign_adjust(ls, 3, expr_list(ls, &e), &e);
@@ -2688,6 +2713,7 @@ static void parse_for_iter(LexState *ls, GCstr *indexname)
   fscope_begin(fs, &bl, 0);  /* Scope for visible variables. */
   var_add(ls, nvars-3);
   bcreg_reserve(fs, nvars-3);
+  emit_tbc(fs, nvars-3);
   parse_block(ls);
   fscope_end(fs);
   /* Perform loop inversion. Loop control instructions are at the end. */
@@ -2708,10 +2734,11 @@ static void parse_for(LexState *ls, BCLine line)
   fscope_begin(fs, &bl, FSCOPE_LOOP);
   lj_lex_next(ls);  /* Skip 'for'. */
   varname = lex_str(ls);  /* Get first variable name. */
+  uint8_t flags = parse_attribs_flags(ls);
   if (ls->tok == '=')
-    parse_for_num(ls, varname, line);
+    parse_for_num(ls, varname, line, flags);
   else if (ls->tok == ',' || ls->tok == TK_in)
-    parse_for_iter(ls, varname);
+    parse_for_iter(ls, varname, flags);
   else
     err_syntax(ls, LJ_ERR_XFOR);
   lex_match(ls, TK_end, TK_for, line);

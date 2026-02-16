@@ -95,4 +95,87 @@ verify_close()
 verify_warn()
 verify_coroutine_close()
 
+local function verify_param_const()
+  print("Verifying parameter <const>...")
+  local code = [[
+    return function(x <const>)
+      x = 10
+    end
+  ]]
+  local chunk, err = loadstring(code)
+  if chunk then
+    print("Warning: Compilation of assignment to const param succeeded (runtime check?)")
+    local f = chunk()
+    local ok, r_err = pcall(f, 1)
+    if ok then
+       error("Assigning to <const> parameter should fail!")
+    else
+       print("Caught expected runtime error: " .. tostring(r_err))
+    end
+  else
+    print("Caught expected compile error: " .. tostring(err))
+  end
+end
+
+local function verify_param_close()
+  print("Verifying parameter <close>...")
+  local closed = false
+  local mt = { __close = function() closed = true end }
+  local function f(x <close>)
+    print("Inside f with <close> param")
+  end
+  f(setmetatable({}, mt))
+  if not closed then
+    error("<close> parameter not closed!")
+  end
+  print("<close> parameter verified.")
+end
+
+local function verify_for_generic_close()
+  print("Verifying generic for <close>...")
+  local closed = 0
+  local mt = { __close = function() closed = closed + 1 end }
+  local function iter()
+      local done = false
+      return function()
+        if done then return nil end
+        done = true
+        return setmetatable({}, mt)
+      end
+  end
+  for x <close> in iter() do
+    print("Inside generic loop with <close>")
+  end
+  if closed ~= 1 then
+    error("Generic for loop variable not closed! count="..closed)
+  end
+  print("Generic for <close> verified.")
+end
+
+local function verify_for_generic_const()
+  print("Verifying generic for <const>...")
+  local code = [[
+    for x <const> in pairs({a=1}) do
+      x = 2
+    end
+  ]]
+  local chunk, err = loadstring(code)
+  if chunk then
+    print("Warning: Compilation of assignment to const loop var succeeded (runtime check?)")
+    local ok, r_err = pcall(chunk)
+    if ok then
+       error("Assigning to <const> loop variable should fail!")
+    else
+       print("Caught expected runtime error: " .. tostring(r_err))
+    end
+  else
+    print("Caught expected compile error: " .. tostring(err))
+  end
+end
+
+verify_param_const()
+verify_param_close()
+verify_for_generic_close()
+verify_for_generic_const()
+
 print("All verification tests passed!")
