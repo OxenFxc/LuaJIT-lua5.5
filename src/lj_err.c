@@ -1092,11 +1092,11 @@ LJ_NOINLINE void lj_err_argtype(lua_State *L, int narg, const char *xname)
 {
   const char *tname, *msg;
   if (narg <= LUA_REGISTRYINDEX) {
-    if (narg >= LUA_GLOBALSINDEX) {
+    if (narg == LUA_REGISTRYINDEX || narg == LUA_GLOBALSINDEX || narg == LUA_ENVIRONINDEX) {
       tname = lj_obj_itypename[~LJ_TTAB];
     } else {
       GCfunc *fn = curr_func(L);
-      int idx = LUA_GLOBALSINDEX - narg;
+      int idx = LUA_REGISTRYINDEX - narg;
       if (idx <= fn->c.nupvalues)
 	tname = lj_typename(&fn->c.upvalue[idx-1]);
       else

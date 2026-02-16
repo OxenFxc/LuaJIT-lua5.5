@@ -172,8 +172,8 @@
 #define LUAI_MAXALIGN  lua_Number n; double u; void *s; lua_Integer i; long l
 
 /* Lua 5.5 compatibility */
-#define LUA_GLOBALSINDEX	(-10002)
-#define LUA_ENVIRONINDEX	(-10001)
+#define LUA_GLOBALSINDEX	(-(INT_MAX/2 + 1000) - 10000)
+#define LUA_ENVIRONINDEX	(-(INT_MAX/2 + 1000) - 9999)
 #define luaL_optint		luaL_optinteger
 
 #endif
