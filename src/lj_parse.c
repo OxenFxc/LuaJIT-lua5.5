@@ -1227,7 +1227,7 @@ static GlobalInfo *gvar_lookup(FuncState *fs, GCstr *name)
   LexState *ls = fs->ls;
   int i;
   for (i = (int)ls->gtop-1; i >= 0; i--) {
-    if (name == strref(ls->gstack[i].name))
+    if (gcref(ls->gstack[i].name) != NULL && name == strref(ls->gstack[i].name))
       return &ls->gstack[i];
   }
   return NULL;  /* Not found. */
@@ -1253,7 +1253,7 @@ static MSize var_lookup_uv(FuncState *fs, MSize vidx, ExpDesc *e)
 static void fscope_uvmark(FuncState *fs, BCReg level);
 
 /* Recursively lookup variables in enclosing functions. */
-static MSize var_lookup_(FuncState *fs, GCstr *name, ExpDesc *e, int first)
+static MSize var_lookup_(FuncState *fs, LexState *ls, GCstr *name, ExpDesc *e, int first)
 {
   if (fs) {
     BCReg reg = var_lookup_local(fs, name);
@@ -1267,7 +1267,7 @@ static MSize var_lookup_(FuncState *fs, GCstr *name, ExpDesc *e, int first)
       e->u.sval = name;
       return (MSize)-1;  /* Global. */
     } else {
-      MSize vidx = var_lookup_(fs->prev, name, e, 0);  /* Var in outer func? */
+      MSize vidx = var_lookup_(fs->prev, ls, name, e, 0);  /* Var in outer func? */
       if ((int32_t)vidx >= 0) {  /* Yes, make it an upvalue here. */
 	e->u.s.info = (uint8_t)var_lookup_uv(fs, vidx, e);
 	e->k = VUPVAL;
@@ -1275,6 +1275,14 @@ static MSize var_lookup_(FuncState *fs, GCstr *name, ExpDesc *e, int first)
       }
     }
   } else {  /* Not found in any function, must be a global. */
+    if (ls->gtop > 0) {
+      int i;
+      for (i = 0; i < (int)ls->gtop; i++) {
+	if (gcref(ls->gstack[i].name) == NULL) break;
+      }
+      if (i == (int)ls->gtop)
+	lj_lex_error(ls, 0, LJ_ERR_XDECL, strdata(name));
+    }
     expr_init(e, VGLOBAL, 0);
     e->u.sval = name;
   }
@@ -1283,7 +1291,7 @@ static MSize var_lookup_(FuncState *fs, GCstr *name, ExpDesc *e, int first)
 
 /* Lookup variable name. */
 #define var_lookup(ls, e) \
-  var_lookup_((ls)->fs, lex_str(ls), (e), 1)
+  var_lookup_((ls)->fs, (ls), lex_str(ls), (e), 1)
 
 /* -- Goto an label handling ---------------------------------------------- */
 
@@ -2439,6 +2447,10 @@ static void parse_global(LexState *ls)
     ExpDesc e;
     BCReg nexps, nvars = 0;
     uint8_t flags[LJ_MAX_LOCVAR];
+    if (lex_opt(ls, '*')) {
+      gvar_new(ls, NULL, 0);
+      return;
+    }
     MSize gbase = ls->gtop;
     do {  /* Collect LHS. */
       GCstr *name = lex_str(ls);
@@ -2450,24 +2462,25 @@ static void parse_global(LexState *ls)
     } while (lex_opt(ls, ','));
     if (lex_opt(ls, '=')) {  /* Optional RHS. */
       nexps = expr_list(ls, &e);
-    } else {
-      e.k = VVOID;
-      nexps = 0;
-    }
-    assign_adjust(ls, nvars, nexps, &e);
-    /* Assign RHS to LHS. */
-    {
-      BCReg i;
-      BCReg base = ls->fs->freereg - nvars;
-      for (i = 0; i < nvars; i++) {
-	ExpDesc v, rhs;
-	expr_init(&v, VGLOBAL, 0);
-	v.u.sval = strref(ls->gstack[gbase+i].name);
-	expr_init(&rhs, VNONRELOC, base+i);
-	bcemit_store(ls->fs, &v, &rhs);
-	ls->gstack[gbase+i].info = flags[i] & ~VSTACK_PENDING_CONST;
+      assign_adjust(ls, nvars, nexps, &e);
+      /* Assign RHS to LHS. */
+      {
+	BCReg i;
+	BCReg base = ls->fs->freereg - nvars;
+	for (i = 0; i < nvars; i++) {
+	  ExpDesc v, rhs;
+	  expr_init(&v, VGLOBAL, 0);
+	  v.u.sval = strref(ls->gstack[gbase+i].name);
+	  expr_init(&rhs, VNONRELOC, base+i);
+	  bcemit_store(ls->fs, &v, &rhs);
+	  ls->gstack[gbase+i].info = flags[i] & ~VSTACK_PENDING_CONST;
+	}
+	ls->fs->freereg = base;
       }
-      ls->fs->freereg = base;
+    } else {
+      BCReg i;
+      for (i = 0; i < nvars; i++)
+	ls->gstack[gbase+i].info = flags[i] & ~VSTACK_PENDING_CONST;
     }
   }
 }
@@ -2939,7 +2952,7 @@ static int parse_stmt(LexState *ls)
     GCstr *s = strV(&ls->tokval);
     if (s->len == 6 && !strcmp(strdata(s), "global")) {
       LexToken lk = lj_lex_lookahead(ls);
-      if (lk == TK_function || lk == TK_name || lk == '<') {
+      if (lk == TK_function || lk == TK_name || lk == '<' || lk == '*') {
 	lj_lex_next(ls);
 	parse_global(ls);
 	break;
