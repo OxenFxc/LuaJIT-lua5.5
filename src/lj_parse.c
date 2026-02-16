@@ -118,6 +118,8 @@ typedef uint16_t VarIndex;
 #define VSTACK_VAR_RW		0x01	/* R/W variable. */
 #define VSTACK_GOTO		0x02	/* Pending goto. */
 #define VSTACK_LABEL		0x04	/* Label. */
+#define VSTACK_CONST		0x08	/* Const variable. */
+#define VSTACK_CLOSE		0x10	/* To-be-closed variable (implies const). */
 
 /* Per-function state. */
 typedef struct FuncState {
@@ -625,11 +627,19 @@ static void bcemit_store(FuncState *fs, ExpDesc *var, ExpDesc *e)
 {
   BCIns ins;
   if (var->k == VLOCAL) {
+    if (fs->ls->vstack[var->u.s.aux].info & VSTACK_CONST) {
+      GCstr *name = strref(fs->ls->vstack[var->u.s.aux].name);
+      lj_lex_error(fs->ls, 0, LJ_ERR_XCONST, strdata(name));
+    }
     fs->ls->vstack[var->u.s.aux].info |= VSTACK_VAR_RW;
     expr_free(fs, e);
     expr_toreg(fs, e, var->u.s.info);
     return;
   } else if (var->k == VUPVAL) {
+    if (var->u.s.aux < fs->ls->vtop && (fs->ls->vstack[var->u.s.aux].info & VSTACK_CONST)) {
+      GCstr *name = strref(fs->ls->vstack[var->u.s.aux].name);
+      lj_lex_error(fs->ls, 0, LJ_ERR_XCONST, strdata(name));
+    }
     fs->ls->vstack[var->u.s.aux].info |= VSTACK_VAR_RW;
     expr_toval(fs, e);
     if (e->k <= VKTRUE)
@@ -1142,6 +1152,7 @@ static void var_new(LexState *ls, BCReg n, GCstr *name)
   /* NOBARRIER: name is anchored in fs->kt and ls->vstack is not a GCobj. */
   setgcref(ls->vstack[vtop].name, obj2gco(name));
   fs->varmap[fs->nactvar+n] = (uint16_t)vtop;
+  ls->vstack[vtop].info = 0;
   ls->vtop = vtop+1;
 }
 
@@ -1160,7 +1171,7 @@ static void var_add(LexState *ls, BCReg nvars)
     VarInfo *v = &var_get(ls, fs, nactvar);
     v->startpc = fs->pc;
     v->slot = nactvar++;
-    v->info = 0;
+    v->info &= (VSTACK_CONST|VSTACK_CLOSE);
   }
   fs->nactvar = nactvar;
 }
@@ -2347,10 +2358,30 @@ static void parse_local(LexState *ls)
     BCReg nexps, nvars = 0;
     do {  /* Collect LHS. */
       var_new(ls, nvars++, lex_str(ls));
+      if (ls->tok == '<') {
+	GCstr *attr;
+	lj_lex_next(ls);
+	attr = lex_str(ls);
+	if (!strcmp(strdata(attr), "const")) {
+	  ls->vstack[ls->vtop-1].info |= VSTACK_CONST;
+	} else if (!strcmp(strdata(attr), "close")) {
+	  err_syntax(ls, LJ_ERR_XCLOSE);
+	} else {
+	  err_syntax(ls, LJ_ERR_XSYMBOL);
+	}
+	lex_check(ls, '>');
+      }
     } while (lex_opt(ls, ','));
     if (lex_opt(ls, '=')) {  /* Optional RHS. */
       nexps = expr_list(ls, &e);
     } else {  /* Or implicitly set to nil. */
+      BCReg i;
+      for (i = 0; i < nvars; i++) {
+	if (ls->vstack[ls->vtop - nvars + i].info & VSTACK_CONST) {
+	  GCstr *name = strref(ls->vstack[ls->vtop - nvars + i].name);
+	  lj_lex_error(ls, 0, LJ_ERR_XCONSTINIT, strdata(name));
+	}
+      }
       e.k = VVOID;
       nexps = 0;
     }
