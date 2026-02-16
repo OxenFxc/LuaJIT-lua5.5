@@ -285,6 +285,45 @@ LJLIB_CF(table_pack)
 }
 #endif
 
+LJLIB_CF(table_create)
+{
+  int32_t a = lj_lib_checkint(L, 1);
+  int32_t h = lj_lib_optint(L, 2, 0);
+  lua_createtable(L, a, h);
+  return 1;
+}
+
+LJLIB_CF(table_move)
+{
+  lua_Integer f = luaL_checkinteger(L, 2);
+  lua_Integer e = luaL_checkinteger(L, 3);
+  lua_Integer t = luaL_checkinteger(L, 4);
+  int tt = !lua_isnoneornil(L, 5) ? 5 : 1;
+  lj_lib_checktab(L, 1);
+  lj_lib_checktab(L, tt);
+  if (e >= f) {
+    lua_Integer n, i;
+    if (!((f > 0) || (e < LUA_MAXINTEGER + f)))
+       lj_err_arg(L, 3, LJ_ERR_BADVAL);
+    n = e - f + 1;
+    if (t > LUA_MAXINTEGER - n + 1)
+       lj_err_arg(L, 4, LJ_ERR_BADVAL);
+    if (t > e || t <= f || (tt != 1 && !lua_compare(L, 1, tt, LUA_OPEQ))) {
+      for (i = 0; i < n; i++) {
+        lua_geti(L, 1, f + i);
+        lua_seti(L, tt, t + i);
+      }
+    } else {
+      for (i = n - 1; i >= 0; i--) {
+        lua_geti(L, 1, f + i);
+        lua_seti(L, tt, t + i);
+      }
+    }
+  }
+  lua_pushvalue(L, tt);
+  return 1;
+}
+
 LJLIB_NOREG LJLIB_CF(table_new)		LJLIB_REC(.)
 {
   int32_t a = lj_lib_checkint(L, 1);

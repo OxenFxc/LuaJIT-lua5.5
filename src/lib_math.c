@@ -191,6 +191,29 @@ LJLIB_CF(math_randomseed)
   return 0;
 }
 
+LJLIB_CF(math_tointeger)
+{
+  int valid;
+  lua_Number n = lua_tonumberx(L, 1, &valid);
+  if (valid) {
+    lua_Integer i = (lua_Integer)n;
+    if ((lua_Number)i == n) {
+      lua_pushinteger(L, i);
+      return 1;
+    }
+  }
+  lua_pushnil(L);
+  return 1;
+}
+
+LJLIB_CF(math_ult)
+{
+  lua_Integer a = luaL_checkinteger(L, 1);
+  lua_Integer b = luaL_checkinteger(L, 2);
+  lua_pushboolean(L, (uint64_t)a < (uint64_t)b);
+  return 1;
+}
+
 /* ------------------------------------------------------------------------ */
 
 #include "lj_libdef.h"
