@@ -15,6 +15,7 @@
 #include "lj_tab.h"
 #include "lj_meta.h"
 #include "lj_frame.h"
+#include "lj_func.h"
 #if LJ_HASFFI
 #include "lj_ctype.h"
 #endif
@@ -2760,13 +2761,23 @@ void lj_record_ins(jit_State *J)
     lj_ffrecord_func(J);
     break;
 
+  case BC_TBC:
+    lj_ir_call(J, IRCALL_lj_func_newtbc,
+	       emitir(IRT(IR_ADD, IRT_PGC), REF_BASE, lj_ir_kintpgc(J, ra*8)));
+    break;
+
+  case BC_UCLO:
+    lj_ir_call(J, IRCALL_lj_func_closeuv,
+	       emitir(IRT(IR_ADD, IRT_PGC), REF_BASE, lj_ir_kintpgc(J, ra*8)));
+    J->pc += bc_j(ins)+1;
+    break;
+
   default:
     if (op >= BC__MAX) {
       lj_ffrecord_func(J);
       break;
     }
     /* fallthrough */
-  case BC_UCLO:
   case BC_FNEW:
     setintV(&J->errinfo, (int32_t)op);
     lj_trace_err_info(J, LJ_TRERR_NYIBC);
