@@ -3930,6 +3930,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 #endif
     break;
 
+  case BC_BNOT:
+    | int3
+    break;
+
   /* -- Binary ops -------------------------------------------------------- */
 
     |.macro ins_arithpre, sseins, ssereg
@@ -4035,6 +4039,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ins_arithpre movsd, xmm1
     |  jmp ->BC_MODVN_Z			// Avoid 3 copies. It's slow anyway.
     break;
+  case BC_IDIVVN: case BC_IDIVNV: case BC_IDIVVV:
+    | int3
+    break;
   case BC_POW:
     |  ins_arithpre movsd, xmm1
     |  mov RB, BASE
@@ -4091,6 +4098,14 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov [BASE+RA*8], RB
     |.endif
     |  ins_next
+    break;
+
+  case BC_BANDVN: case BC_BANDNV: case BC_BANDVV:
+  case BC_BORVN: case BC_BORNV: case BC_BORVV:
+  case BC_BXORVN: case BC_BXORNV: case BC_BXORVV:
+  case BC_SHLVN: case BC_SHLNV: case BC_SHLVV:
+  case BC_SHRVN: case BC_SHRNV: case BC_SHRVV:
+    | int3
     break;
 
   /* -- Constant ops ------------------------------------------------------ */
