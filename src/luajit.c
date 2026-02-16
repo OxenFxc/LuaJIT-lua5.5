@@ -19,6 +19,10 @@
 
 #include "lj_arch.h"
 
+#if !defined(lua_assert)
+#define lua_assert(x)	((void)0)
+#endif
+
 #if LJ_TARGET_POSIX
 #include <unistd.h>
 #define lua_stdin_is_tty()	isatty(0)
@@ -248,7 +252,7 @@ static int loadline(lua_State *L)
   if (!pushline(L, 1))
     return -1;  /* no input */
   for (;;) {  /* repeat until gets a complete line */
-    status = luaL_loadbuffer(L, lua_tostring(L, 1), lua_strlen(L, 1), "=stdin");
+    status = luaL_loadbuffer(L, lua_tostring(L, 1), lua_objlen(L, 1), "=stdin");
     if (!incomplete(L, status)) break;  /* cannot try to add lines? */
     if (!pushline(L, 0))  /* no more input? */
       return -1;
@@ -586,11 +590,13 @@ int main(int argc, char **argv)
   int status;
   lua_State *L;
   if (!argv[0]) argv = empty_argv; else if (argv[0][0]) progname = argv[0];
-  L = lua_open();
+    printf("L created\n");
+  L = luaL_newstate();
   if (L == NULL) {
     l_message("cannot create state: not enough memory");
     return EXIT_FAILURE;
   }
+    printf("pcall done\n");
   smain.argc = argc;
   smain.argv = argv;
   status = lua_cpcall(L, pmain, NULL);
@@ -599,3 +605,7 @@ int main(int argc, char **argv)
   return (status || smain.status > 0) ? EXIT_FAILURE : EXIT_SUCCESS;
 }
 
+
+#if !defined(lua_assert)
+#define lua_assert(x)	((void)0)
+#endif

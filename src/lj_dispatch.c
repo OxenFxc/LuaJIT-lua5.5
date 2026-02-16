@@ -326,7 +326,7 @@ LUA_API void LUAJIT_VERSION_SYM(void)
 /* -- Hooks --------------------------------------------------------------- */
 
 /* This function can be called asynchronously (e.g. during a signal). */
-LUA_API int lua_sethook(lua_State *L, lua_Hook func, int mask, int count)
+LUA_API void lua_sethook(lua_State *L, lua_Hook func, int mask, int count)
 {
   global_State *g = G(L);
   mask &= HOOK_EVENTMASK;
@@ -336,7 +336,6 @@ LUA_API int lua_sethook(lua_State *L, lua_Hook func, int mask, int count)
   g->hookmask = (uint8_t)((g->hookmask & ~HOOK_EVENTMASK) | mask);
   lj_trace_abort(g);  /* Abort recording on any hook change. */
   lj_dispatch_update(g);
-  return 1;
 }
 
 LUA_API lua_Hook lua_gethook(lua_State *L)
