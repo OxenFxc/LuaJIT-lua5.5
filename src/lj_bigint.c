@@ -81,6 +81,57 @@ GCbigint *lj_bigint_fromuint64(lua_State *L, uint64_t val)
   return b;
 }
 
+GCbigint *lj_bigint_fromnumber(lua_State *L, double n)
+{
+  if (n != n) return NULL; /* NaN */
+  /* Check for Infinity */
+  uint64_t u;
+  memcpy(&u, &n, 8);
+  if ((u & 0x7ff0000000000000ULL) == 0x7ff0000000000000ULL) return NULL;
+
+  if (n == 0.0) return lj_bigint_new(L, 0);
+
+  int sign = 1;
+  if (n < 0) { sign = -1; n = -n; }
+
+  /* Check if it fits in uint64 (approx < 1.84e19) */
+  if (n < 18446744073709551616.0) { /* 2^64 */
+     GCbigint *b = lj_bigint_fromuint64(L, (uint64_t)n);
+     b->sign = sign;
+     return b;
+  }
+
+  int exp = (int)((u >> 52) & 0x7ff) - 1023;
+  /* exp >= 64 is guaranteed here */
+
+  uint64_t mant = (u & 0xfffffffffffff) | 0x10000000000000ULL;
+
+  int shift = exp - 52;
+  uint32_t word_idx = shift / 32;
+  uint32_t bit_ofs = shift % 32;
+
+  uint32_t len = word_idx + 3;
+
+  GCbigint *b = lj_bigint_new(L, len);
+  b->sign = sign;
+  uint32_t *d = bigdata(b);
+
+  uint32_t v0 = (uint32_t)mant;
+  uint32_t v1 = (uint32_t)(mant >> 32);
+
+  if (bit_ofs == 0) {
+      d[word_idx] = v0;
+      d[word_idx+1] = v1;
+  } else {
+      d[word_idx] = (v0 << bit_ofs);
+      d[word_idx+1] = (v0 >> (32 - bit_ofs)) | (v1 << bit_ofs);
+      d[word_idx+2] = (v1 >> (32 - bit_ofs));
+  }
+
+  big_normalize(b);
+  return b;
+}
+
 static GCbigint *to_bigint(lua_State *L, cTValue *v)
 {
   if (tvisbigint(v)) {
@@ -88,11 +139,7 @@ static GCbigint *to_bigint(lua_State *L, cTValue *v)
   } else if (tvisint(v)) {
     return lj_bigint_fromint64(L, intV(v));
   } else if (tvisnum(v)) {
-    lua_Number n = numV(v);
-    int64_t i = (int64_t)n;
-    if (n == (lua_Number)i) {
-        return lj_bigint_fromint64(L, i);
-    }
+    return lj_bigint_fromnumber(L, numV(v));
   }
   /* Handle cdata int64? Should have been handled by caller converting or via generic arithmetic */
   return NULL;
@@ -228,13 +275,16 @@ static GCbigint *big_mul(lua_State *L, GCbigint *b1, GCbigint *b2)
 
 int lj_bigint_arith(lua_State *L, TValue *ra, cTValue *rb, cTValue *rc, MMS mm)
 {
-  GCbigint *b1 = to_bigint(L, rb);
+  ptrdiff_t ra_offset = savestack(L, ra);
+  ptrdiff_t rb_offset = savestack(L, rb);
   ptrdiff_t rc_offset = savestack(L, rc);
+  GCbigint *b1 = to_bigint(L, rb);
   GCbigint *b2;
   GCbigint *r = NULL;
   int pushed1 = 0, pushed2 = 0;
 
   if (!b1) return 0;
+  rb = restorestack(L, rb_offset); /* Restore after allocation */
   if (!tvisbigint(rb)) { setbigintV(L, L->top++, b1); pushed1 = 1; }
 
   b2 = to_bigint(L, restorestack(L, rc_offset));
@@ -255,6 +305,7 @@ int lj_bigint_arith(lua_State *L, TValue *ra, cTValue *rb, cTValue *rc, MMS mm)
         return 0;
   }
 
+  ra = restorestack(L, ra_offset);
   setbigintV(L, ra, r);
 
   /* Clean up stack */
