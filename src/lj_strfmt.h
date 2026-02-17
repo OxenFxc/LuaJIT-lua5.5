@@ -21,7 +21,8 @@ typedef struct FormatState {
 /* Format types (max. 16). */
 typedef enum FormatType {
   STRFMT_EOF, STRFMT_ERR, STRFMT_LIT,
-  STRFMT_INT, STRFMT_UINT, STRFMT_NUM, STRFMT_STR, STRFMT_CHAR, STRFMT_PTR
+  STRFMT_INT, STRFMT_UINT, STRFMT_NUM, STRFMT_STR, STRFMT_CHAR, STRFMT_PTR,
+  STRFMT_QUOTE
 } FormatType;
 
 /* Format subtypes (bits are reused). */
@@ -60,7 +61,7 @@ typedef enum FormatType {
 #define STRFMT_I	STRFMT_D
 #define STRFMT_O	(STRFMT_UINT|STRFMT_T_OCT)
 #define STRFMT_P	(STRFMT_PTR)
-#define STRFMT_Q	(STRFMT_STR|STRFMT_T_QUOTED)
+#define STRFMT_Q	(STRFMT_QUOTE)
 #define STRFMT_S	(STRFMT_STR)
 #define STRFMT_U	(STRFMT_UINT)
 #define STRFMT_X	(STRFMT_UINT|STRFMT_T_HEX)

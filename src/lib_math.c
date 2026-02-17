@@ -152,6 +152,15 @@ LJLIB_CF(math_random)		LJLIB_REC(.)
     double r1 = lj_lib_checknum(L, 1);
 #endif
     if (n == 1) {
+      if (r1 == 0.0) {
+	uint64_t u = lj_prng_u64(rs);
+#if LJ_DUALNUM
+	setintV(L->top-1, (int32_t)u);
+#else
+	setnumV(L->top-1, (lua_Number)(int64_t)u);
+#endif
+	return 1;
+      }
       d = lj_vm_floor(d*r1) + 1.0;  /* d is an int in range [1, r1] */
     } else {
 #if LJ_DUALNUM
