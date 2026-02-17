@@ -78,6 +78,7 @@ GCbigint *lj_bigint_fromuint64(lua_State *L, uint64_t val)
   buff[0] = (uint32_t)(val & 0xFFFFFFFF);
   buff[1] = (uint32_t)(val >> 32);
   big_normalize(b);
+  fprintf(stderr, "lj_bigint_fromnumber done actual\n");
   return b;
 }
 
@@ -204,7 +205,7 @@ static void sub_abs(GCbigint *dst, const GCbigint *a, const GCbigint *b)
   big_normalize(dst);
 }
 
-static GCbigint *big_add(lua_State *L, GCbigint *b1, GCbigint *b2)
+GCbigint *lj_bigint_add(lua_State *L, GCbigint *b1, GCbigint *b2)
 {
   uint32_t max_len = (b1->len > b2->len ? b1->len : b2->len) + 2; /* +2 safe margin */
   GCbigint *r = lj_bigint_new(L, max_len);
@@ -225,7 +226,7 @@ static GCbigint *big_add(lua_State *L, GCbigint *b1, GCbigint *b2)
   return r;
 }
 
-static GCbigint *big_sub(lua_State *L, GCbigint *b1, GCbigint *b2)
+GCbigint *lj_bigint_sub(lua_State *L, GCbigint *b1, GCbigint *b2)
 {
   uint32_t max_len = (b1->len > b2->len ? b1->len : b2->len) + 2;
   GCbigint *r = lj_bigint_new(L, max_len);
@@ -246,7 +247,7 @@ static GCbigint *big_sub(lua_State *L, GCbigint *b1, GCbigint *b2)
   return r;
 }
 
-static GCbigint *big_mul(lua_State *L, GCbigint *b1, GCbigint *b2)
+GCbigint *lj_bigint_mul(lua_State *L, GCbigint *b1, GCbigint *b2)
 {
   if (b1->len == 0 || b2->len == 0) {
     return lj_bigint_new(L, 0);
@@ -296,9 +297,9 @@ int lj_bigint_arith(lua_State *L, TValue *ra, cTValue *rb, cTValue *rc, MMS mm)
   setbigintV(L, L->top++, b2);
 
   switch (mm) {
-    case MM_add: r = big_add(L, b1, b2); break;
-    case MM_sub: r = big_sub(L, b1, b2); break;
-    case MM_mul: r = big_mul(L, b1, b2); break;
+    case MM_add: r = lj_bigint_add(L, b1, b2); break;
+    case MM_sub: r = lj_bigint_sub(L, b1, b2); break;
+    case MM_mul: r = lj_bigint_mul(L, b1, b2); break;
     default:
         /* Clean up stack */
         L->top -= 2;

@@ -35,6 +35,7 @@
 #include "lj_dispatch.h"
 #include "lj_vm.h"
 #include "lj_prng.h"
+#include "lj_bigint.h"
 
 /* Some local macros to save typing. Undef'd at the end. */
 #define IR(ref)			(&J->cur.ir[(ref)])
@@ -1160,6 +1161,26 @@ nocheck:
 /* Record call to arithmetic metamethod. */
 static TRef rec_mm_arith(jit_State *J, RecordIndex *ix, MMS mm)
 {
+  if (tref_isbigint(ix->tab) || tref_isbigint(ix->key)) {
+    TRef rb = ix->tab, rc = ix->key;
+    IRCallID id;
+    switch (mm) {
+    case MM_add: id = IRCALL_lj_bigint_add; break;
+    case MM_sub: id = IRCALL_lj_bigint_sub; break;
+    case MM_mul: id = IRCALL_lj_bigint_mul; break;
+    default: goto fallback;
+    }
+    if (!tref_isbigint(rb)) {
+      if (tref_isinteger(rb)) rb = emitir(IRTN(IR_CONV), rb, IRCONV_NUM_INT);
+      rb = lj_ir_call(J, IRCALL_lj_bigint_fromnumber, rb);
+    }
+    if (!tref_isbigint(rc)) {
+      if (tref_isinteger(rc)) rc = emitir(IRTN(IR_CONV), rc, IRCONV_NUM_INT);
+      rc = lj_ir_call(J, IRCALL_lj_bigint_fromnumber, rc);
+    }
+    return lj_ir_call(J, id, rb, rc);
+  }
+fallback:
   /* Set up metamethod call first to save ix->tab and ix->tabv. */
   BCReg func = rec_mm_prep(J, mm == MM_concat ? lj_cont_cat : lj_cont_ra);
   TRef *base = J->base + func;
@@ -2402,6 +2423,24 @@ void lj_record_ins(jit_State *J)
 	ra = lj_ir_call(J, IRCALL_lj_str_cmp, ra, rc);
 	rc = lj_ir_kint(J, 0);
 	ta = IRT_INT;
+      } else if (tref_isbigint(ra) || tref_isbigint(rc)) {
+	TRef zero = lj_ir_kint(J, 0);
+	int irop;
+	rec_comp_prep(J);
+	if (!tref_isbigint(ra)) {
+	  if (tref_isinteger(ra)) ra = emitir(IRTN(IR_CONV), ra, IRCONV_NUM_INT);
+	  ra = lj_ir_call(J, IRCALL_lj_bigint_fromnumber, ra);
+	}
+	if (!tref_isbigint(rc)) {
+	  if (tref_isinteger(rc)) rc = emitir(IRTN(IR_CONV), rc, IRCONV_NUM_INT);
+	  rc = lj_ir_call(J, IRCALL_lj_bigint_fromnumber, rc);
+	}
+	ra = lj_ir_call(J, IRCALL_lj_bigint_rawcompare, ra, rc);
+	rc = zero;
+	irop = (int)op - (int)BC_ISLT + (int)IR_LT;
+	emitir(IRTG(irop, IRT_INT), ra, rc);
+	rec_comp_fixup(J, J->pc, ((int)op ^ irop) & 1);
+	break;
       } else {
 	rec_mm_comp(J, &ix, (int)op);
 	break;
