@@ -206,7 +206,7 @@ static void sub_abs(GCbigint *dst, const GCbigint *a, const GCbigint *b)
 
 static GCbigint *big_add(lua_State *L, GCbigint *b1, GCbigint *b2)
 {
-  uint32_t max_len = (b1->len > b2->len ? b1->len : b2->len) + 1;
+  uint32_t max_len = (b1->len > b2->len ? b1->len : b2->len) + 2; /* +2 safe margin */
   GCbigint *r = lj_bigint_new(L, max_len);
 
   if (b1->sign == b2->sign) {
@@ -227,7 +227,7 @@ static GCbigint *big_add(lua_State *L, GCbigint *b1, GCbigint *b2)
 
 static GCbigint *big_sub(lua_State *L, GCbigint *b1, GCbigint *b2)
 {
-  uint32_t max_len = (b1->len > b2->len ? b1->len : b2->len) + 1;
+  uint32_t max_len = (b1->len > b2->len ? b1->len : b2->len) + 2;
   GCbigint *r = lj_bigint_new(L, max_len);
 
   if (b1->sign != b2->sign) {
@@ -276,23 +276,24 @@ static GCbigint *big_mul(lua_State *L, GCbigint *b1, GCbigint *b2)
 int lj_bigint_arith(lua_State *L, TValue *ra, cTValue *rb, cTValue *rc, MMS mm)
 {
   ptrdiff_t ra_offset = savestack(L, ra);
-  ptrdiff_t rb_offset = savestack(L, rb);
+  /* rb_offset not needed as we assume rb is used only for b1 creation immediately */
   ptrdiff_t rc_offset = savestack(L, rc);
   GCbigint *b1 = to_bigint(L, rb);
   GCbigint *b2;
   GCbigint *r = NULL;
-  int pushed1 = 0, pushed2 = 0;
 
   if (!b1) return 0;
-  rb = restorestack(L, rb_offset); /* Restore after allocation */
-  if (!tvisbigint(rb)) { setbigintV(L, L->top++, b1); pushed1 = 1; }
+
+  /* Always push b1 to anchor it */
+  setbigintV(L, L->top++, b1);
 
   b2 = to_bigint(L, restorestack(L, rc_offset));
   if (!b2) {
-      if (pushed1) L->top--;
+      L->top--;
       return 0;
   }
-  if (!tvisbigint(restorestack(L, rc_offset))) { setbigintV(L, L->top++, b2); pushed2 = 1; }
+  /* Always push b2 to anchor it */
+  setbigintV(L, L->top++, b2);
 
   switch (mm) {
     case MM_add: r = big_add(L, b1, b2); break;
@@ -300,8 +301,7 @@ int lj_bigint_arith(lua_State *L, TValue *ra, cTValue *rb, cTValue *rc, MMS mm)
     case MM_mul: r = big_mul(L, b1, b2); break;
     default:
         /* Clean up stack */
-        if (pushed2) L->top--;
-        if (pushed1) L->top--;
+        L->top -= 2;
         return 0;
   }
 
@@ -309,8 +309,7 @@ int lj_bigint_arith(lua_State *L, TValue *ra, cTValue *rb, cTValue *rc, MMS mm)
   setbigintV(L, ra, r);
 
   /* Clean up stack */
-  if (pushed2) L->top--;
-  if (pushed1) L->top--;
+  L->top -= 2;
 
   return 1;
 }
