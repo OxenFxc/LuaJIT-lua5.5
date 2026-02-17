@@ -1223,6 +1223,7 @@ static void gvar_new(LexState *ls, GCstr *name, uint8_t info)
     setgcref(ls->gstack[gtop].name, obj2gco(name));
   else
     setgcrefnull(ls->gstack[gtop].name);
+  ls->gstack[gtop].vscope = ls->vtop;
   ls->gstack[gtop].info = info;
   ls->gtop = gtop+1;
 }
@@ -1265,14 +1266,20 @@ static void fscope_uvmark(FuncState *fs, BCReg level);
 static MSize var_lookup_(FuncState *fs, LexState *ls, GCstr *name, ExpDesc *e, int flags)
 {
   if (fs) {
+    GlobalInfo *gi = gvar_lookup(fs, name);
     BCReg reg = var_lookup_local(fs, name);
     if ((int32_t)reg >= 0) {  /* Local in this function? */
+      if (gi && gi->vscope > fs->varmap[reg])
+	goto global_lookup;  /* Global is newer, so it shadows local. */
       expr_init(e, VLOCAL, reg);
       if (!(flags & VARLOOKUP_FIRST))
 	fscope_uvmark(fs, reg);  /* Scope now has an upvalue. */
       return (MSize)(e->u.s.aux = (uint32_t)fs->varmap[reg]);
     } else {
-      MSize vidx = var_lookup_(fs->prev, ls, name, e, flags & ~VARLOOKUP_FIRST);  /* Var in outer func? */
+      MSize vidx;
+      if (gi && gi->vscope >= fs->vbase)
+	goto global_lookup;  /* Global in this function shadows outer variables. */
+      vidx = var_lookup_(fs->prev, ls, name, e, flags & ~VARLOOKUP_FIRST);  /* Var in outer func? */
       if ((int32_t)vidx >= 0) {  /* Yes, make it an upvalue here. */
 	e->u.s.info = (uint8_t)var_lookup_uv(fs, vidx, e);
 	e->k = VUPVAL;
@@ -1280,6 +1287,7 @@ static MSize var_lookup_(FuncState *fs, LexState *ls, GCstr *name, ExpDesc *e, i
       }
     }
   } else {  /* Not found in any function, must be a global. */
+  global_lookup:
     if (name != ls->envn) {
       ExpDesc env;
       if ((int32_t)var_lookup_(ls->fs, ls, ls->envn, &env, VARLOOKUP_FIRST|VARLOOKUP_NOERR) >= 0) {
@@ -2537,9 +2545,6 @@ static void parse_local(LexState *ls)
     ExpDesc v, b;
     FuncState *fs = ls->fs;
     GCstr *name = lex_str(ls);
-    GlobalInfo *gi = gvar_lookup(fs, name);
-    if (gi && gi >= ls->gstack + fs->bl->gstart)
-      lj_lex_error(ls, 0, LJ_ERR_XDUPVAR, strdata(name));
     var_new(ls, 0, name);
     expr_init(&v, VLOCAL, fs->freereg);
     v.u.s.aux = fs->varmap[fs->freereg];
@@ -2557,9 +2562,6 @@ static void parse_local(LexState *ls)
     uint8_t flags = parse_attribs_flags(ls);
     do {  /* Collect LHS. */
       GCstr *name = lex_str(ls);
-      GlobalInfo *gi = gvar_lookup(ls->fs, name);
-      if (gi && gi >= ls->gstack + ls->fs->bl->gstart)
-	lj_lex_error(ls, 0, LJ_ERR_XDUPVAR, strdata(name));
       var_new(ls, nvars++, name);
       ls->vstack[ls->vtop-1].info |= flags;
       parse_attribs(ls);
