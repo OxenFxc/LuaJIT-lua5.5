@@ -356,6 +356,7 @@ enum {
 #if LJ_TARGET_X86ORX64
   LJ_K64_TOBIT,		/* 2^52 + 2^51 */
   LJ_K64_2P64,		/* 2^64 */
+  LJ_K64_2P53,		/* 2^53 */
 #endif
 #if LJ_TARGET_MIPS64
   LJ_K64_2P63,		/* 2^63 */
