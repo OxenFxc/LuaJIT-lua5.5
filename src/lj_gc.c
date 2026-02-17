@@ -20,6 +20,7 @@
 #include "lj_meta.h"
 #include "lj_state.h"
 #include "lj_frame.h"
+#include "lj_bigint.h"
 #if LJ_HASFFI
 #include "lj_ctype.h"
 #include "lj_cdata.h"
@@ -80,7 +81,7 @@ static void gc_mark(global_State *g, GCobj *o)
     gc_marktv(g, uvval(uv));
     if (uv->closed)
       gray2black(o);  /* Closed upvalues are never gray. */
-  } else if (gct != ~LJ_TSTR && gct != ~LJ_TCDATA) {
+  } else if (gct != ~LJ_TSTR && gct != ~LJ_TCDATA && gct != ~LJ_TBIGINT) {
     lj_assertG(gct == ~LJ_TFUNC || gct == ~LJ_TTAB ||
 	       gct == ~LJ_TTHREAD || gct == ~LJ_TPROTO || gct == ~LJ_TTRACE,
 	       "bad GC type %d", gct);
@@ -405,7 +406,8 @@ static const GCFreeFunc gc_freefunc[] = {
   (GCFreeFunc)0,
 #endif
   (GCFreeFunc)lj_tab_free,
-  (GCFreeFunc)lj_udata_free
+  (GCFreeFunc)lj_udata_free,
+  (GCFreeFunc)lj_bigint_free
 };
 
 /* Full sweep of a GC list. */

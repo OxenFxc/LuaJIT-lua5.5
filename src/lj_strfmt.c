@@ -20,6 +20,7 @@
 #include "lj_ctype.h"
 #endif
 #include "lj_lib.h"
+#include "lj_bigint.h"
 
 /* -- Format parser ------------------------------------------------------- */
 
@@ -529,6 +530,8 @@ GCstr * LJ_FASTCALL lj_strfmt_obj(lua_State *L, cTValue *o)
     return strV(o);
   } else if (tvisnumber(o)) {
     return lj_strfmt_number(L, o);
+  } else if (tvisbigint(o)) {
+    return lj_bigint_tostring(L, bigintV(o));
   } else if (tvisnil(o)) {
     return lj_str_newlit(L, "nil");
   } else if (tvisfalse(o)) {

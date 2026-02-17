@@ -22,6 +22,7 @@
 #include "lj_strscan.h"
 #include "lj_strfmt.h"
 #include "lj_lib.h"
+#include "lj_bigint.h"
 
 /* -- Metamethod handling ------------------------------------------------- */
 
@@ -216,6 +217,11 @@ TValue *lj_meta_arith(lua_State *L, TValue *ra, cTValue *rb, cTValue *rc,
   MMS mm = bcmode_mm(op);
   TValue tempb, tempc;
   cTValue *b, *c;
+
+  if (tvisbigint(rb) || tvisbigint(rc)) {
+    if (lj_bigint_arith(L, ra, rb, rc, mm)) return NULL;
+  }
+
   if ((b = str2num(rb, &tempb)) != NULL &&
       (c = str2num(rc, &tempc)) != NULL) {  /* Try coercion first. */
     setnumV(ra, lj_vm_foldarith(numV(b), numV(c), (int)mm-MM_add));
@@ -240,8 +246,8 @@ TValue *lj_meta_cat(lua_State *L, TValue *top, int left)
   int fromc = 0;
   if (left < 0) { left = -left; fromc = 1; }
   do {
-    if (!(tvisstr(top) || tvisnumber(top) || tvisbuf(top)) ||
-	!(tvisstr(top-1) || tvisnumber(top-1) || tvisbuf(top-1))) {
+    if (!(tvisstr(top) || tvisnumber(top) || tvisbuf(top) || tvisbigint(top)) ||
+	!(tvisstr(top-1) || tvisnumber(top-1) || tvisbuf(top-1) || tvisbigint(top-1))) {
       cTValue *mo = lj_meta_lookup(L, top-1, MM_concat);
       if (tvisnil(mo)) {
 	mo = lj_meta_lookup(L, top, MM_concat);
@@ -297,6 +303,9 @@ TValue *lj_meta_cat(lua_State *L, TValue *top, int left)
 	  lj_buf_putmem(sb, sbx->r, sbufxlen(sbx));
 	} else if (tvisint(o)) {
 	  lj_strfmt_putint(sb, intV(o));
+	} else if (tvisbigint(o)) {
+	  GCstr *s = lj_bigint_tostring(L, bigintV(o));
+	  lj_buf_putmem(sb, strdata(s), s->len);
 	} else {
 	  lj_strfmt_putfnum(sb, STRFMT_G14, numV(o));
 	}
@@ -383,6 +392,11 @@ TValue * LJ_FASTCALL lj_meta_equal_cd(lua_State *L, BCIns ins)
 /* Helper for ordered comparisons. String compare, __lt/__le metamethods. */
 TValue *lj_meta_comp(lua_State *L, cTValue *o1, cTValue *o2, int op)
 {
+  if (tvisbigint(o1) || tvisbigint(o2)) {
+    int res = lj_bigint_compare(L, o1, o2);
+    if (res != -2)
+      return (TValue *)(intptr_t)(((op&2) ? res <= 0 : res < 0) ^ (op&1));
+  }
   if (LJ_HASFFI && (tviscdata(o1) || tviscdata(o2))) {
     ASMFunction cont = (op & 1) ? lj_cont_condf : lj_cont_condt;
     MMS mm = (op & 2) ? MM_le : MM_lt;
