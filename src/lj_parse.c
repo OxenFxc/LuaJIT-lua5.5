@@ -2465,8 +2465,6 @@ static void parse_global(LexState *ls)
   if (lex_opt(ls, TK_function)) {  /* Global function declaration. */
     GCstr *name = lex_str(ls);
     ExpDesc v, b, env;
-    if ((int32_t)var_lookup_local(ls->fs, name) >= 0)
-      lj_lex_error(ls, 0, LJ_ERR_XDUPVAR, strdata(name));
     gvar_new(ls, name, 0);
     if ((int32_t)var_lookup_(ls->fs, ls, ls->envn, &env, VARLOOKUP_FIRST|VARLOOKUP_NOERR) >= 0) {
       ExpDesc key;
@@ -2493,8 +2491,6 @@ static void parse_global(LexState *ls)
     MSize gbase = ls->gtop;
     do {  /* Collect LHS. */
       GCstr *name = lex_str(ls);
-      if ((int32_t)var_lookup_local(ls->fs, name) >= 0)
-	lj_lex_error(ls, 0, LJ_ERR_XDUPVAR, strdata(name));
       checklimit(ls->fs, nvars, LJ_MAX_LOCVAR, "variable names");
       flags[nvars] = pflags | parse_attribs_flags(ls);
       if (flags[nvars] & VSTACK_CLOSE) err_syntax(ls, LJ_ERR_XSYNTAX);
@@ -2541,7 +2537,8 @@ static void parse_local(LexState *ls)
     ExpDesc v, b;
     FuncState *fs = ls->fs;
     GCstr *name = lex_str(ls);
-    if (gvar_lookup(fs, name))
+    GlobalInfo *gi = gvar_lookup(fs, name);
+    if (gi && gi >= ls->gstack + fs->bl->gstart)
       lj_lex_error(ls, 0, LJ_ERR_XDUPVAR, strdata(name));
     var_new(ls, 0, name);
     expr_init(&v, VLOCAL, fs->freereg);
@@ -2560,7 +2557,8 @@ static void parse_local(LexState *ls)
     uint8_t flags = parse_attribs_flags(ls);
     do {  /* Collect LHS. */
       GCstr *name = lex_str(ls);
-      if (gvar_lookup(ls->fs, name))
+      GlobalInfo *gi = gvar_lookup(ls->fs, name);
+      if (gi && gi >= ls->gstack + ls->fs->bl->gstart)
 	lj_lex_error(ls, 0, LJ_ERR_XDUPVAR, strdata(name));
       var_new(ls, nvars++, name);
       ls->vstack[ls->vtop-1].info |= flags;
