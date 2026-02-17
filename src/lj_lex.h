@@ -52,6 +52,7 @@ typedef struct VarInfo {
 /* Info for global variables. Only used during bytecode generation. */
 typedef struct GlobalInfo {
   GCRef name;		/* Global variable name. */
+  MSize vscope;		/* Scope (vtop) where the global variable is active. */
   uint8_t info;		/* Variable info. */
 } GlobalInfo;
 
