@@ -277,7 +277,11 @@ int lj_bigint_arith(lua_State *L, TValue *ra, cTValue *rb, cTValue *rc, MMS mm)
 {
   TValue rbv = *rb;
   TValue rcv = *rc;
-  ptrdiff_t ra_offset = savestack(L, ra);
+  ptrdiff_t ra_offset;
+
+  if (curr_funcisL(L)) L->top = curr_topL(L);
+
+  ra_offset = savestack(L, ra);
   /* Ensure stack space for 2 slots (b1, b2). to_bigint may trigger GC/resize. */
   lj_state_checkstack(L, 5);
   GCbigint *b1 = to_bigint(L, &rbv);
@@ -321,6 +325,9 @@ int lj_bigint_compare(lua_State *L, cTValue *o1, cTValue *o2)
   TValue v1 = *o1;
   TValue v2 = *o2;
   int pushed1 = 0, pushed2 = 0;
+
+  if (curr_funcisL(L)) L->top = curr_topL(L);
+
   lj_state_checkstack(L, 2);
 
   GCbigint *b1 = to_bigint(L, &v1);
