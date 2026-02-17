@@ -275,10 +275,12 @@ GCbigint *lj_bigint_mul(lua_State *L, GCbigint *b1, GCbigint *b2)
 
 int lj_bigint_arith(lua_State *L, TValue *ra, cTValue *rb, cTValue *rc, MMS mm)
 {
+  TValue rbv = *rb;
+  TValue rcv = *rc;
   ptrdiff_t ra_offset = savestack(L, ra);
-  /* rb_offset not needed as we assume rb is used only for b1 creation immediately */
-  ptrdiff_t rc_offset = savestack(L, rc);
-  GCbigint *b1 = to_bigint(L, rb);
+  /* Ensure stack space for 2 slots (b1, b2). to_bigint may trigger GC/resize. */
+  lj_state_checkstack(L, 5);
+  GCbigint *b1 = to_bigint(L, &rbv);
   GCbigint *b2;
   GCbigint *r = NULL;
 
@@ -287,7 +289,7 @@ int lj_bigint_arith(lua_State *L, TValue *ra, cTValue *rb, cTValue *rc, MMS mm)
   /* Always push b1 to anchor it */
   setbigintV(L, L->top++, b1);
 
-  b2 = to_bigint(L, restorestack(L, rc_offset));
+  b2 = to_bigint(L, &rcv);
   if (!b2) {
       L->top--;
       return 0;
@@ -316,20 +318,30 @@ int lj_bigint_arith(lua_State *L, TValue *ra, cTValue *rb, cTValue *rc, MMS mm)
 
 int lj_bigint_compare(lua_State *L, cTValue *o1, cTValue *o2)
 {
-  GCbigint *b1 = to_bigint(L, o1);
-  GCbigint *b2 = to_bigint(L, o2);
-  if (!b1 || !b2) {
-      if (!b1 && !tvisbigint(o1)) return -2; /* Not comparable here */
-      if (!b2 && !tvisbigint(o2)) return -2;
-      /* If one is bigint and other cannot be converted, they are not equal? */
-      /* Or should we error? Standard comparison behavior... */
-      return -2;
+  TValue v1 = *o1;
+  TValue v2 = *o2;
+  int pushed1 = 0, pushed2 = 0;
+  lj_state_checkstack(L, 2);
+
+  GCbigint *b1 = to_bigint(L, &v1);
+  if (b1 && !tvisbigint(&v1)) {
+    setbigintV(L, L->top++, b1);
+    pushed1 = 1;
   }
 
-  /* Stack anchor logic omitted for comparison as we don't allocate during cmp_abs */
-  /* But to_bigint DOES allocate. */
-  if (!tvisbigint(o1)) setbigintV(L, L->top++, b1);
-  if (!tvisbigint(o2)) setbigintV(L, L->top++, b2);
+  GCbigint *b2 = to_bigint(L, &v2);
+  if (b2 && !tvisbigint(&v2)) {
+    setbigintV(L, L->top++, b2);
+    pushed2 = 1;
+  }
+
+  if (!b1 || !b2) {
+      if (pushed2) L->top--;
+      if (pushed1) L->top--;
+      if (!b1 && !tvisbigint(&v1)) return -2; /* Not comparable here */
+      if (!b2 && !tvisbigint(&v2)) return -2;
+      return -2;
+  }
 
   int cmp;
   if (b1->sign != b2->sign) {
@@ -339,8 +351,8 @@ int lj_bigint_compare(lua_State *L, cTValue *o1, cTValue *o2)
       if (b1->sign < 0) cmp = -cmp;
   }
 
-  if (!tvisbigint(o2)) L->top--;
-  if (!tvisbigint(o1)) L->top--;
+  if (pushed2) L->top--;
+  if (pushed1) L->top--;
 
   return cmp;
 }

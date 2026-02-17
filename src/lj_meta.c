@@ -23,6 +23,7 @@
 #include "lj_strfmt.h"
 #include "lj_lib.h"
 #include "lj_bigint.h"
+#include "lj_state.h"
 
 /* -- Metamethod handling ------------------------------------------------- */
 
@@ -216,11 +217,19 @@ TValue *lj_meta_arith(lua_State *L, TValue *ra, cTValue *rb, cTValue *rc,
 {
   MMS mm = bcmode_mm(op);
   TValue tempb, tempc;
+  TValue rbv = *rb;
+  TValue rcv = *rc;
   cTValue *b, *c;
+  ptrdiff_t ra_offset = savestack(L, ra);
+
+  rb = &rbv;
+  rc = &rcv;
 
   if (tvisbigint(rb) || tvisbigint(rc)) {
     if (lj_bigint_arith(L, ra, rb, rc, mm)) return NULL;
   }
+
+  ra = restorestack(L, ra_offset);
 
   if ((b = str2num(rb, &tempb)) != NULL &&
       (c = str2num(rc, &tempc)) != NULL) {  /* Try coercion first. */
@@ -245,11 +254,16 @@ TValue *lj_meta_arith_bigint(lua_State *L, TValue *ra, cTValue *rb, cTValue *rc,
 		      BCReg op)
 {
   MMS mm = bcmode_mm(op);
-  /* Force BigInt arithmetic. lj_bigint_arith handles conversion. */
-  if (lj_bigint_arith(L, ra, rb, rc, mm)) return NULL;
+  TValue rbv = *rb;
+  TValue rcv = *rc;
+  ptrdiff_t ra_offset = savestack(L, ra);
 
+  /* Force BigInt arithmetic. lj_bigint_arith handles conversion. */
+  if (lj_bigint_arith(L, ra, &rbv, &rcv, mm)) return NULL;
+
+  ra = restorestack(L, ra_offset);
   /* Fallback to standard meta arithmetic if BigInt conversion/arithmetic fails. */
-  return lj_meta_arith(L, ra, rb, rc, op);
+  return lj_meta_arith(L, ra, &rbv, &rcv, op);
 }
 
 /* Helper for CAT. Coercion, iterative concat, __concat metamethod. */
