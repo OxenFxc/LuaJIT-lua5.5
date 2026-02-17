@@ -2804,8 +2804,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  cbz CARG2w, target
     |.endmacro
     |
-    |.macro ins_arithhead
-    ||vk = ((int)op - BC_ADDVN) / (BC_ADDNV-BC_ADDVN);
+    |.macro ins_arithhead_base, base_op
+    ||vk = ((int)op - base_op) / (BC_ADDNV-BC_ADDVN);
     ||if (vk == 1) {
     |   and RC, RC, #255
     |    decode_RB RB, INS
@@ -2813,6 +2813,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |   decode_RB RB, INS
     |    and RC, RC, #255
     ||}
+    |.endmacro
+    |
+    |.macro ins_arithhead
+    |  ins_arithhead_base BC_ADDVN
     |.endmacro
     |
     |.macro ins_arithload, reg1, reg2
@@ -2855,8 +2859,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  fsub res, reg1, d2
     |.endmacro
     |
-    |.macro ins_arithdn, intins, fpins
-    |  ins_arithhead
+    |.macro ins_arithdn_base, intins, fpins, base_op
+    |  ins_arithhead_base base_op
     |  ins_arithload CARG1, CARG2
     |  ins_arithcheck_int >5
     |.if "intins" == "smull"
@@ -2891,6 +2895,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  b <4
     |.endmacro
     |
+    |.macro ins_arithdn, intins, fpins
+    |  ins_arithdn_base intins, fpins, BC_ADDVN
+    |.endmacro
+    |
     |.macro ins_arithfp, fpins
     |  ins_arithhead
     |  ins_arithload CARG1, CARG2
@@ -2918,7 +2926,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ins_arithfp fdiv
     break;
   case BC_IDIVVN: case BC_IDIVNV: case BC_IDIVVV:
-    |  ins_arithdn ins_arithidivi, call_vm_idiv
+    |  ins_arithdn_base ins_arithidivi, call_vm_idiv, BC_IDIVVN
     break;
   case BC_MODVN: case BC_MODNV: case BC_MODVV:
     |  ins_arithdn ins_arithmodi, ins_arithmod
@@ -2928,8 +2936,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ins_arithfp fpow
     break;
 
-    |.macro ins_bit, intins, fphelper
-    |  ins_arithhead
+    |.macro ins_bit, intins, fphelper, base_op
+    |  ins_arithhead_base base_op
     |  ins_arithload CARG1, CARG2
     |  checkint CARG1, >5
     |  checkint CARG2, >6
@@ -2962,19 +2970,19 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |.endmacro
 
   case BC_BANDVN: case BC_BANDNV: case BC_BANDVV:
-    |  ins_bit and, vm_bit_band
+    |  ins_bit and, vm_bit_band, BC_BANDVN
     break;
   case BC_BORVN: case BC_BORNV: case BC_BORVV:
-    |  ins_bit orr, vm_bit_bor
+    |  ins_bit orr, vm_bit_bor, BC_BORVN
     break;
   case BC_BXORVN: case BC_BXORNV: case BC_BXORVV:
-    |  ins_bit eor, vm_bit_bxor
+    |  ins_bit eor, vm_bit_bxor, BC_BXORVN
     break;
   case BC_SHLVN: case BC_SHLNV: case BC_SHLVV:
-    |  ins_bit lsl, vm_bit_shl
+    |  ins_bit lsl, vm_bit_shl, BC_SHLVN
     break;
   case BC_SHRVN: case BC_SHRNV: case BC_SHRVV:
-    |  ins_bit lsr, vm_bit_shr
+    |  ins_bit lsr, vm_bit_shr, BC_SHRVN
     break;
 
   case BC_CAT:
