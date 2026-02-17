@@ -15,7 +15,7 @@
 
 MAJVER=  2
 MINVER=  1
-ABIVER=  5.1
+ABIVER=  5.5
 
 # LuaJIT uses rolling releases. The release version is based on the time of
 # the latest git commit. The 'git' command must be available during the build.
