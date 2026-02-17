@@ -1472,7 +1472,7 @@ LUA_API void lua_closeslot(lua_State *L, int idx)
 #undef lua_resetthread
 LUA_API int lua_resetthread(lua_State *L)
 {
-  return lua_status(L);
+  return lua_closethread(L, NULL);
 }
 
 LUA_API int lua_getiuservalue(lua_State *L, int idx, int n)

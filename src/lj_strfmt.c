@@ -25,7 +25,7 @@
 
 static const uint8_t strfmt_map[('x'-'A')+1] = {
   STRFMT_A,0,0,0,STRFMT_E,STRFMT_F,STRFMT_G,0,0,0,0,0,0,
-  0,0,0,0,0,0,0,0,0,0,STRFMT_X,0,0,
+  0,0,0,0,0,0,0,STRFMT_UNI,0,0,STRFMT_X,0,0,
   0,0,0,0,0,0,
   STRFMT_A,0,STRFMT_C,STRFMT_D,STRFMT_E,STRFMT_F,STRFMT_G,0,STRFMT_I,0,0,0,0,
   0,STRFMT_O,STRFMT_P,STRFMT_Q,0,STRFMT_S,0,STRFMT_U,0,0,STRFMT_X
@@ -137,7 +137,7 @@ char * LJ_FASTCALL lj_strfmt_wptr(char *p, const void *v)
   ptrdiff_t x = (ptrdiff_t)v;
   MSize i, n = STRFMT_MAXBUF_PTR;
   if (x == 0) {
-    *p++ = 'N'; *p++ = 'U'; *p++ = 'L'; *p++ = 'L';
+    *p++ = '('; *p++ = 'n'; *p++ = 'i'; *p++ = 'l'; *p++ = ')';
     return p;
   }
 #if LJ_64
@@ -241,6 +241,40 @@ SBuf * LJ_FASTCALL lj_strfmt_putquoted(SBuf *sb, GCstr *str)
 #endif
 
 /* -- Formatted conversions to buffer ------------------------------------- */
+
+/* Add formatted Unicode character to buffer. */
+SBuf *lj_strfmt_putfuni(SBuf *sb, SFormat sf, int32_t c)
+{
+  MSize width = STRFMT_WIDTH(sf);
+  uint32_t u = (uint32_t)c;
+  MSize len, pad;
+  char *w;
+  if (u < 0x80) len = 1;
+  else if (u < 0x800) len = 2;
+  else if (u < 0x10000) len = 3;
+  else if (u < 0x200000) len = 4;
+  else if (u < 0x4000000) len = 5;
+  else len = 6;
+  pad = width > len ? width - len : 0;
+  w = lj_buf_more(sb, len + pad);
+  if (!(sf & STRFMT_F_LEFT)) while (pad--) *w++ = ' ';
+  if (u < 0x80) {
+    *w++ = (char)u;
+  } else {
+    if (len >= 6) { *w++ = (char)(0xfc | (u >> 30)); *w++ = (char)(0x80 | ((u >> 24) & 0x3f)); }
+    else if (len == 5) { *w++ = (char)(0xf8 | (u >> 24)); }
+    else if (len == 4) { *w++ = (char)(0xf0 | (u >> 18)); }
+    else if (len == 3) { *w++ = (char)(0xe0 | (u >> 12)); }
+    else /* len == 2 */ { *w++ = (char)(0xc0 | (u >> 6)); }
+    if (len >= 5) *w++ = (char)(0x80 | ((u >> 18) & 0x3f));
+    if (len >= 4) *w++ = (char)(0x80 | ((u >> 12) & 0x3f));
+    if (len >= 3) *w++ = (char)(0x80 | ((u >> 6) & 0x3f));
+    *w++ = (char)(0x80 | (u & 0x3f));
+  }
+  if ((sf & STRFMT_F_LEFT)) while (pad--) *w++ = ' ';
+  sb->w = w;
+  return sb;
+}
 
 /* Add formatted char to buffer. */
 SBuf *lj_strfmt_putfchar(SBuf *sb, SFormat sf, int32_t c)
@@ -484,6 +518,13 @@ int lj_strfmt_putarg(lua_State *L, SBuf *sb, int arg, int retry)
       case STRFMT_CHAR:
 	lj_strfmt_putfchar(sb, sf, lj_lib_checkint(L, arg));
 	break;
+      case STRFMT_UNI: {
+	int32_t c = lj_lib_checkint(L, arg);
+	if ((uint32_t)c > 0x7fffffff)
+	  lj_err_arg(L, arg, LJ_ERR_BADVAL);
+	lj_strfmt_putfuni(sb, sf, c);
+	break;
+	}
       case STRFMT_PTR:  /* No formatting. */
 	lj_strfmt_putptr(sb, lj_obj_ptr(G(L), o));
 	break;
