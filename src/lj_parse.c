@@ -1301,6 +1301,10 @@ static MSize var_lookup_(FuncState *fs, LexState *ls, GCstr *name, ExpDesc *e, i
 	*e = env;
 	return (MSize)-1;
       }
+    } else {
+      /* _ENV not found. */
+      /* Falling through would return VGLOBAL "_ENV", which segfaults if not handled. */
+      /* But we can't easily error here if we want to support global _ENV? */
     }
     if (ls->gtop > 0 && !(flags & VARLOOKUP_NOERR)) {
       int i;
