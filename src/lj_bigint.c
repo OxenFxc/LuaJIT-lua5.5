@@ -78,7 +78,6 @@ GCbigint *lj_bigint_fromuint64(lua_State *L, uint64_t val)
   buff[0] = (uint32_t)(val & 0xFFFFFFFF);
   buff[1] = (uint32_t)(val >> 32);
   big_normalize(b);
-  fprintf(stderr, "lj_bigint_fromnumber done actual\n");
   return b;
 }
 
