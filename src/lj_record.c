@@ -2539,10 +2539,11 @@ void lj_record_ins(jit_State *J)
   case BC_ADDVN: case BC_SUBVN: case BC_MULVN: case BC_DIVVN:
   case BC_ADDVV: case BC_SUBVV: case BC_MULVV: case BC_DIVVV: {
     MMS mm = bcmode_mm(op);
-    if (tref_isnumber_str(rb) && tref_isnumber_str(rc))
+    if (tref_isnumber_str(rb) && tref_isnumber_str(rc)) {
       rc = lj_opt_narrow_arith(J, rb, rc, rbv, rcv,
 			       (int)mm - (int)MM_add + (int)IR_ADD);
-    else
+      if (mm <= MM_mul) J->needsnap = 1;
+    } else
       rc = rec_mm_arith(J, &ix, mm);
     break;
     }
