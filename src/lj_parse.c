@@ -2921,8 +2921,6 @@ static void parse_for_iter(LexState *ls, GCstr *indexname, uint8_t flags)
   assign_adjust(ls, 4, expr_list(ls, &e), &e);
   /* The iterator needs another 4 [5] slots (close func [pc] | state ctl). */
   bcreg_bump(fs, 4+ls->fr2);
-  /* Emit BC_TBC for the closing variable (1st hidden variable). */
-  bcemit_AD(fs, BC_TBC, fs->freereg - 4, 0);
   /* Swap variables to match LuaJIT internal layout: CLOSE GEN STATE CTL -> GEN STATE CTL CLOSE.
   ** explist returns: GEN STATE CTL CLOSE (f, s, c, cl) into slots 0, 1, 2, 3.
   ** We want: CLOSE(0)=cl(3), GEN(1)=f(0), STATE(2)=s(1), CTL(3)=c(2).
@@ -2938,6 +2936,8 @@ static void parse_for_iter(LexState *ls, GCstr *indexname, uint8_t flags)
     bcemit_AD(fs, BC_MOV, b, tmp);     /* f_slot = cl */
     bcreg_free(fs, tmp);
   }
+  /* Emit BC_TBC for the closing variable (1st hidden variable). */
+  bcemit_AD(fs, BC_TBC, fs->freereg - 4, 0);
   isnext = (nvars <= 6 && fs->pc > exprpc && predict_next(ls, fs, exprpc));
   var_add(ls, 4);  /* Hidden control variables. */
   lex_check(ls, TK_do);
