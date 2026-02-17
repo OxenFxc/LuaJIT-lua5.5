@@ -409,3 +409,26 @@ GCstr *lj_bigint_tostring(lua_State *L, GCbigint *b)
   lj_mem_free(G(L), buff, estimated);
   return s;
 }
+
+lua_Number lj_bigint_tonumber(lua_State *L, GCbigint *b)
+{
+  if (b->len == 0) return 0.0;
+  lua_Number res = 0.0;
+  uint32_t *d = bigdata(b);
+  int i;
+  for (i = (int)b->len - 1; i >= 0; i--) {
+    res = res * 4294967296.0 + (lua_Number)d[i];
+  }
+  if (b->sign < 0) res = -res;
+  return res;
+}
+
+int64_t lj_bigint_toint64(lua_State *L, GCbigint *b)
+{
+  if (b->len == 0) return 0;
+  uint32_t *d = bigdata(b);
+  uint64_t u = d[0];
+  if (b->len > 1) u |= ((uint64_t)d[1] << 32);
+  if (b->sign < 0) return -(int64_t)u;
+  return (int64_t)u;
+}

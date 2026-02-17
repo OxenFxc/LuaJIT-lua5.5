@@ -20,5 +20,7 @@ LJ_FUNC int lj_bigint_arith(lua_State *L, TValue *ra, cTValue *rb, cTValue *rc, 
 LJ_FUNC int lj_bigint_compare(lua_State *L, cTValue *o1, cTValue *o2);
 LJ_FUNC int lj_bigint_rawcompare(GCbigint *a, GCbigint *b);
 LJ_FUNC GCstr *lj_bigint_tostring(lua_State *L, GCbigint *b);
+LJ_FUNC lua_Number lj_bigint_tonumber(lua_State *L, GCbigint *b);
+LJ_FUNC int64_t lj_bigint_toint64(lua_State *L, GCbigint *b);
 
 #endif
