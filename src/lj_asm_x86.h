@@ -2109,9 +2109,21 @@ static void asm_fparith(ASMState *as, IRIns *ir, x86Op xo)
     }
     right = asm_fuseload(as, rref, rset_clear(allow, dest));
   }
-  if (xo == XO_ADDSD || xo == XO_SUBSD || xo == XO_MULSD)
-    asm_guard_bigint(as, ir, dest, right);
-  emit_mrm(as, xo, dest, right);
+  if (xo == XO_ADDSD || xo == XO_SUBSD || xo == XO_MULSD) {
+    Reg tmp = ra_scratch(as, rset_exclude(allow, dest));
+    Reg chk = ra_scratch(as, rset_exclude(rset_exclude(allow, dest), tmp));
+    int32_t ofs_2p53 = (int32_t)dispofs(as, &as->J->k64[LJ_K64_2P53]);
+    int32_t ofs_abs = (int32_t)dispofs(as, LJ_KSIMD(as->J, LJ_KSIMD_ABS));
+    emit_rr(as, XO_MOVAPS, dest, tmp);
+    asm_guardcc(as, CC_AE);
+    emit_rmro(as, XO_UCOMISD, chk, RID_DISPATCH, ofs_2p53);
+    emit_rmro(as, XO_ANDPS, chk, RID_DISPATCH, ofs_abs);
+    emit_rr(as, XO_MOVAPS, chk, tmp);
+    emit_mrm(as, xo, tmp, right);
+    emit_rr(as, XO_MOVAPS, tmp, dest);
+  } else {
+    emit_mrm(as, xo, dest, right);
+  }
   ra_left(as, dest, lref);
 }
 
