@@ -1605,6 +1605,31 @@ static void asm_mul(ASMState *as, IRIns *ir)
   asm_intmul(as, ir);
 }
 
+static void asm_idiv(ASMState *as, IRIns *ir)
+{
+#if !LJ_SOFTFP
+  if (irt_isnum(ir->t)) {
+    RegSet drop = RID2RSET(RID_R0)|RID2RSET(RID_R1)|RID2RSET(RID_R2)|
+		  RID2RSET(RID_R3)|RID2RSET(RID_R12);
+    RegSet of;
+    Reg dest;
+    ra_evictset(as, drop);
+    dest = ra_dest(as, ir, RSET_FPR);
+    emit_dnm(as, ARMI_VMOV_D_RR, RID_RETLO, RID_RETHI, (dest & 15));
+    emit_call(as, (void *)lj_vm_floor_sf);
+    /* Workaround to protect argument GPRs from being used for remat. */
+    of = as->freeset;
+    as->freeset &= ~RSET_RANGE(RID_R0, RID_R1+1);
+    as->cost[RID_R0] = as->cost[RID_R1] = REGCOST(~0u, ASMREF_L);
+    as->freeset |= (of & RSET_RANGE(RID_R0, RID_R1+1));
+    emit_dnm(as, ARMI_VMOV_RR_D, RID_R0, RID_R1, (dest & 15));
+    asm_fparith(as, ir, ARMI_VDIV_D);
+    return;
+  }
+#endif
+  lj_assertA(0, "unsupported integer IDIV");
+}
+
 #define asm_addov(as, ir)	asm_add(as, ir)
 #define asm_subov(as, ir)	asm_sub(as, ir)
 #define asm_mulov(as, ir)	asm_mul(as, ir)

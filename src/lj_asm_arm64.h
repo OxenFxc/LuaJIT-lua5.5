@@ -1468,6 +1468,17 @@ static void asm_mul(ASMState *as, IRIns *ir)
   asm_intmul(as, ir);
 }
 
+static void asm_idiv(ASMState *as, IRIns *ir)
+{
+  if (irt_isnum(ir->t)) {
+    Reg dest = ra_dest(as, ir, RSET_FPR);
+    emit_dn(as, A64I_FRINTMd, (dest & 31), (dest & 31));
+    asm_fparith(as, ir, A64I_FDIVd);
+  } else {
+    lj_assertA(0, "unsupported integer IDIV");
+  }
+}
+
 #define asm_addov(as, ir)	asm_add(as, ir)
 #define asm_subov(as, ir)	asm_sub(as, ir)
 #define asm_mulov(as, ir)	asm_mul(as, ir)
