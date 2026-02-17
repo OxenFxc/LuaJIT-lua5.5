@@ -25,7 +25,7 @@
 
 static const uint8_t strfmt_map[('x'-'A')+1] = {
   STRFMT_A,0,0,0,STRFMT_E,STRFMT_F,STRFMT_G,0,0,0,0,0,0,
-  0,0,0,0,0,0,0,0,0,0,STRFMT_X,0,0,
+  0,0,0,0,0,0,0,STRFMT_UNI,0,0,STRFMT_X,0,0,
   0,0,0,0,0,0,
   STRFMT_A,0,STRFMT_C,STRFMT_D,STRFMT_E,STRFMT_F,STRFMT_G,0,STRFMT_I,0,0,0,0,
   0,STRFMT_O,STRFMT_P,STRFMT_Q,0,STRFMT_S,0,STRFMT_U,0,0,STRFMT_X
@@ -131,13 +131,48 @@ char * LJ_FASTCALL lj_strfmt_wint(char *p, int32_t k)
 }
 #undef WINT_R
 
+/* Write Unicode code point to buffer (UTF-8). */
+static char * LJ_FASTCALL lj_strfmt_wuni(char *p, int32_t k)
+{
+  uint32_t u = (uint32_t)k;
+  if (u < 0x80) {
+    *p++ = (char)u;
+  } else if (u < 0x800) {
+    *p++ = (char)(0xC0 | (u >> 6));
+    *p++ = (char)(0x80 | (u & 0x3F));
+  } else if (u < 0x10000) {
+    *p++ = (char)(0xE0 | (u >> 12));
+    *p++ = (char)(0x80 | ((u >> 6) & 0x3F));
+    *p++ = (char)(0x80 | (u & 0x3F));
+  } else if (u < 0x200000) {
+    *p++ = (char)(0xF0 | (u >> 18));
+    *p++ = (char)(0x80 | ((u >> 12) & 0x3F));
+    *p++ = (char)(0x80 | ((u >> 6) & 0x3F));
+    *p++ = (char)(0x80 | (u & 0x3F));
+  } else if (u < 0x4000000) {
+    *p++ = (char)(0xF8 | (u >> 24));
+    *p++ = (char)(0x80 | ((u >> 18) & 0x3F));
+    *p++ = (char)(0x80 | ((u >> 12) & 0x3F));
+    *p++ = (char)(0x80 | ((u >> 6) & 0x3F));
+    *p++ = (char)(0x80 | (u & 0x3F));
+  } else {
+    *p++ = (char)(0xFC | (u >> 30));
+    *p++ = (char)(0x80 | ((u >> 24) & 0x3F));
+    *p++ = (char)(0x80 | ((u >> 18) & 0x3F));
+    *p++ = (char)(0x80 | ((u >> 12) & 0x3F));
+    *p++ = (char)(0x80 | ((u >> 6) & 0x3F));
+    *p++ = (char)(0x80 | (u & 0x3F));
+  }
+  return p;
+}
+
 /* Write pointer to buffer. */
 char * LJ_FASTCALL lj_strfmt_wptr(char *p, const void *v)
 {
   ptrdiff_t x = (ptrdiff_t)v;
   MSize i, n = STRFMT_MAXBUF_PTR;
   if (x == 0) {
-    *p++ = 'N'; *p++ = 'U'; *p++ = 'L'; *p++ = 'L';
+    *p++ = '('; *p++ = 'n'; *p++ = 'i'; *p++ = 'l'; *p++ = ')';
     return p;
   }
 #if LJ_64
@@ -364,6 +399,14 @@ SBuf *lj_strfmt_putfnum_uint(SBuf *sb, SFormat sf, lua_Number n)
   return lj_strfmt_putfxint(sb, sf, lj_num2u64(n));
 }
 
+/* Add formatted Unicode character to buffer. */
+static SBuf *lj_strfmt_putfuni(SBuf *sb, SFormat sf, int32_t c)
+{
+  UNUSED(sf);
+  sb->w = lj_strfmt_wuni(lj_buf_more(sb, 6), c);
+  return sb;
+}
+
 /* Format stack arguments to buffer. */
 int lj_strfmt_putarg(lua_State *L, SBuf *sb, int arg, int retry)
 {
@@ -484,6 +527,9 @@ int lj_strfmt_putarg(lua_State *L, SBuf *sb, int arg, int retry)
       case STRFMT_CHAR:
 	lj_strfmt_putfchar(sb, sf, lj_lib_checkint(L, arg));
 	break;
+      case STRFMT_UNI:
+	lj_strfmt_putfuni(sb, sf, lj_lib_checkint(L, arg));
+	break;
       case STRFMT_PTR:  /* No formatting. */
 	lj_strfmt_putptr(sb, lj_obj_ptr(G(L), o));
 	break;
@@ -592,6 +638,9 @@ const char *lj_strfmt_pushvf(lua_State *L, const char *fmt, va_list argp)
       }
     case STRFMT_CHAR:
       lj_buf_putb(sb, va_arg(argp, int));
+      break;
+    case STRFMT_UNI:
+      lj_strfmt_putfuni(sb, sf, (int32_t)va_arg(argp, long));
       break;
     case STRFMT_PTR:
       lj_strfmt_putptr(sb, va_arg(argp, void *));
