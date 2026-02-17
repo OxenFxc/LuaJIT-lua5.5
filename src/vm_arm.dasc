@@ -3173,6 +3173,36 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 #endif
     break;
 
+  case BC_BNOT:
+    |  // RA = dst*8, RC = src
+    |  lsl RC, RC, #3
+    |  ldrd CARG12, [BASE, RC]
+    |  checktp CARG2, LJ_TISNUM
+    |  bhi ->vmeta_unm
+    |  bne >1
+    |  mvn CARG1, CARG1
+    |2:
+    |   ins_next1
+    |   ins_next2
+    |  strd CARG12, [BASE, RA]
+    |   ins_next3
+    |1:
+    |  bl ->vm_tobit
+    |  mvn CARG1, CARG1
+    |.if FPU
+    |  vmov s0, CARG1
+    |  vcvt.f64.s32 d0, s0
+    |  add CARG2, BASE, RA
+    |  vstr d0, [CARG2]
+    |   ins_next1
+    |   ins_next2
+    |   ins_next3
+    |.else
+    |  bl extern __aeabi_i2d
+    |  b <2
+    |.endif
+    break;
+
   /* -- Binary ops -------------------------------------------------------- */
 
     |.macro ins_arithcheck, cond, ncond, target
@@ -3346,6 +3376,14 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     break;
   case BC_MODVN: case BC_MODNV: case BC_MODVV:
     |  ins_arithdn vm_modi, vm_mod, ->vm_mod
+    break;
+  case BC_IDIVVN: case BC_IDIVNV: case BC_IDIVVV:
+  case BC_BANDVN: case BC_BANDNV: case BC_BANDVV:
+  case BC_BORVN: case BC_BORNV: case BC_BORVV:
+  case BC_BXORVN: case BC_BXORNV: case BC_BXORVV:
+  case BC_SHLVN: case BC_SHLNV: case BC_SHLVV:
+  case BC_SHRVN: case BC_SHRNV: case BC_SHRVV:
+    |  NYI
     break;
   case BC_POW:
     |  // NYI: (partial) integer arithmetic.
@@ -3588,6 +3626,16 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |   ins_next2
     |  strd CARG12, [BASE, RA]
     |   ins_next3
+    break;
+
+  case BC_TBC:
+    |  // RA = dst*8
+    |  str BASE, L->base
+    |  mov CARG1, L
+    |  add CARG2, BASE, RA
+    |  bl extern lj_func_newtbc
+    |  ldr BASE, L->base
+    |  ins_next
     break;
 
   /* -- Table ops --------------------------------------------------------- */

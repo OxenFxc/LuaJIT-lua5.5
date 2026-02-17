@@ -2727,6 +2727,26 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 #endif
     break;
 
+  case BC_BNOT:
+    |  // RA = dst, RC = src
+    |  ldr TMP0, [BASE, RC, lsl #3]
+    |.if DUALNUM
+    |  checkint TMP0, >1
+    |  mvn TMP0w, TMP0w
+    |  add_TISNUM TMP0, TMP0
+    |  str TMP0, [BASE, RA, lsl #3]
+    |  ins_next
+    |1:
+    |.endif
+    |  checknum TMP0, ->vmeta_unm
+    |  fmov FARG1, TMP0
+    |  bl ->vm_tobit
+    |  mvn CRET1w, CRET1w
+    |  scvtf d0, CRET1w
+    |  str d0, [BASE, RA, lsl #3]
+    |  ins_next
+    break;
+
   /* -- Binary ops -------------------------------------------------------- */
 
     |.macro ins_arithcheck_int, target
@@ -2851,6 +2871,14 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     break;
   case BC_MODVN: case BC_MODNV: case BC_MODVV:
     |  ins_arithdn ins_arithmodi, ins_arithmod
+    break;
+  case BC_IDIVVN: case BC_IDIVNV: case BC_IDIVVV:
+  case BC_BANDVN: case BC_BANDNV: case BC_BANDVV:
+  case BC_BORVN: case BC_BORNV: case BC_BORVV:
+  case BC_BXORVN: case BC_BXORNV: case BC_BXORVV:
+  case BC_SHLVN: case BC_SHLNV: case BC_SHLVV:
+  case BC_SHRVN: case BC_SHRNV: case BC_SHRVV:
+    |  NYI
     break;
   case BC_POW:
     |  // NYI: (partial) integer arithmetic.
@@ -3056,6 +3084,16 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |   movn TMP0, #~LJ_TFUNC
     |   add CRET1, CRET1, TMP0, lsl #47
     |  str CRET1, [BASE, RA, lsl #3]
+    |  ins_next
+    break;
+
+  case BC_TBC:
+    |  // RA = dst
+    |  str BASE, L->base
+    |  mov CARG1, L
+    |  add CARG2, BASE, RA, lsl #3
+    |  bl extern lj_func_newtbc
+    |  ldr BASE, L->base
     |  ins_next
     break;
 
