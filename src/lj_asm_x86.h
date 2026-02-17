@@ -2074,6 +2074,21 @@ static int asm_swapops(ASMState *as, IRIns *ir)
   return 0;  /* Otherwise don't swap. */
 }
 
+static void asm_guard_bigint(ASMState *as, IRIns *ir, Reg dest, Reg right)
+{
+  RegSet allow = rset_exclude(RSET_FPR, dest);
+  Reg tmp;
+  int32_t ofs_2p53 = (int32_t)dispofs(as, &as->J->k64[LJ_K64_2P53]);
+  int32_t ofs_abs = (int32_t)dispofs(as, LJ_KSIMD(as->J, LJ_KSIMD_ABS));
+
+  if (ra_hasreg(right)) rset_clear(allow, right);
+  tmp = ra_scratch(as, allow);
+  asm_guardcc(as, CC_AE);
+  emit_rmro(as, XO_UCOMISD, tmp, RID_DISPATCH, ofs_2p53);
+  emit_rmro(as, XO_ANDPS, tmp, RID_DISPATCH, ofs_abs);
+  emit_rr(as, XO_MOVAPS, tmp, dest);
+}
+
 static void asm_fparith(ASMState *as, IRIns *ir, x86Op xo)
 {
   IRRef lref = ir->op1;
@@ -2094,6 +2109,8 @@ static void asm_fparith(ASMState *as, IRIns *ir, x86Op xo)
     }
     right = asm_fuseload(as, rref, rset_clear(allow, dest));
   }
+  if (xo == XO_ADDSD || xo == XO_SUBSD || xo == XO_MULSD)
+    asm_guard_bigint(as, ir, dest, right);
   emit_mrm(as, xo, dest, right);
   ra_left(as, dest, lref);
 }
