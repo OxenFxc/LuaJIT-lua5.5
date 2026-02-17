@@ -126,6 +126,7 @@ typedef uint16_t VarIndex;
 #define VSTACK_LABEL		0x04	/* Label. */
 #define VSTACK_CONST		0x08	/* Const variable. */
 #define VSTACK_CLOSE		0x10	/* To-be-closed variable (implies const). */
+#define VSTACK_GLOBAL_INACTIVE	0x40	/* Global inactive during initialization. */
 
 /* Per-function state. */
 typedef struct FuncState {
@@ -1234,8 +1235,10 @@ static GlobalInfo *gvar_lookup(FuncState *fs, GCstr *name)
   LexState *ls = fs->ls;
   int i;
   for (i = (int)ls->gtop-1; i >= 0; i--) {
-    if (gcref(ls->gstack[i].name) != NULL && name == strref(ls->gstack[i].name))
-      return &ls->gstack[i];
+    if (gcref(ls->gstack[i].name) != NULL && name == strref(ls->gstack[i].name)) {
+      if (!(ls->gstack[i].info & VSTACK_GLOBAL_INACTIVE))
+	return &ls->gstack[i];
+    }
   }
   return NULL;  /* Not found. */
 }
@@ -2503,7 +2506,7 @@ static void parse_global(LexState *ls)
       flags[nvars] = pflags | parse_attribs_flags(ls);
       if (flags[nvars] & VSTACK_CLOSE) err_syntax(ls, LJ_ERR_XSYNTAX);
       flags[nvars++] |= VSTACK_PENDING_CONST;
-      gvar_new(ls, name, 0);
+      gvar_new(ls, name, VSTACK_GLOBAL_INACTIVE);
     } while (lex_opt(ls, ','));
     if (lex_opt(ls, '=')) {  /* Optional RHS. */
       nexps = expr_list(ls, &e);
