@@ -454,10 +454,31 @@ int lj_strfmt_putarg(lua_State *L, SBuf *sb, int arg, int retry)
 	  len = str->len;
 	  s = strdata(str);
 	}
-	if ((sf & STRFMT_T_QUOTED))
-	  strfmt_putquotedlen(sb, s, len);  /* No formatting. */
-	else
-	  strfmt_putfstrlen(sb, sf, s, len);
+	strfmt_putfstrlen(sb, sf, s, len);
+	break;
+	}
+      case STRFMT_QUOTE: {
+	if (tvisstr(o)) {
+	  GCstr *str = strV(o);
+	  strfmt_putquotedlen(sb, strdata(str), str->len);
+#if LJ_HASBUFFER
+	} else if (tvisbuf(o)) {
+	  SBufExt *sbx = bufV(o);
+	  if (sbx == (SBufExt *)sb) lj_err_arg(L, arg+1, LJ_ERR_BUFFER_SELF);
+	  strfmt_putquotedlen(sb, sbx->r, sbufxlen(sbx));
+#endif
+	} else if (tvisint(o)) {
+	  lj_strfmt_putint(sb, intV(o));
+	} else if (tvisnum(o)) {
+	  lj_strfmt_putfnum(sb, STRFMT_G14, numV(o));
+	} else if (tvisnil(o)) {
+	  lj_buf_putmem(sb, "nil", 3);
+	} else if (tvisbool(o)) {
+	  if (boolV(o)) lj_buf_putmem(sb, "true", 4);
+	  else lj_buf_putmem(sb, "false", 5);
+	} else {
+	  lj_err_arg(L, arg, LJ_ERR_BADVAL);
+	}
 	break;
 	}
       case STRFMT_CHAR:
