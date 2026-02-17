@@ -1,0 +1,1 @@
+global z = 1
