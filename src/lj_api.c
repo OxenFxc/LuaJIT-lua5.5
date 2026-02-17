@@ -25,6 +25,7 @@
 #include "lj_vm.h"
 #include "lj_strscan.h"
 #include "lj_strfmt.h"
+#include "lj_bigint.h"
 #include <stdio.h>
 
 /* -- Common helper functions --------------------------------------------- */
@@ -226,6 +227,8 @@ LUA_API int lua_type(lua_State *L, int idx)
 {
   cTValue *o = index2adr(L, idx);
   if (tvisnumber(o)) {
+    return LUA_TNUMBER;
+  } else if (tvisbigint(o)) {
     return LUA_TNUMBER;
 #if LJ_64 && !LJ_GC64
   } else if (tvislightud(o)) {
@@ -506,6 +509,11 @@ LUA_API const char *lua_tolstring(lua_State *L, int idx, size_t *len)
     o = index2adr(L, idx);  /* GC may move the stack. */
     s = lj_strfmt_number(L, o);
     setstrV(L, o, s);
+  } else if (tvisbigint(o)) {
+    lj_gc_check(L);
+    o = index2adr(L, idx);
+    s = lj_bigint_tostring(L, bigintV(o));
+    setstrV(L, o, s);
   } else {
     if (len != NULL) *len = 0;
     return NULL;
@@ -578,6 +586,10 @@ LUA_API size_t lua_objlen(lua_State *L, int idx)
     return udataV(o)->len;
   } else if (tvisnumber(o)) {
     GCstr *s = lj_strfmt_number(L, o);
+    setstrV(L, o, s);
+    return s->len;
+  } else if (tvisbigint(o)) {
+    GCstr *s = lj_bigint_tostring(L, bigintV(o));
     setstrV(L, o, s);
     return s->len;
   } else {

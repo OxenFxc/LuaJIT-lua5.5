@@ -17,6 +17,7 @@
 #include "lj_cdata.h"
 #include "lj_carith.h"
 #include "lj_strscan.h"
+#include "lj_bigint.h"
 
 /* -- C data arithmetic --------------------------------------------------- */
 
@@ -190,9 +191,41 @@ static int carith_int64(lua_State *L, CTState *cts, CDArith *ca, MMS mm)
     up = (uint64_t *)cdataptr(cd);
     setcdataV(L, L->top-1, cd);
     switch (mm) {
-    case MM_add: *up = u0 + u1; break;
-    case MM_sub: *up = u0 - u1; break;
-    case MM_mul: *up = u0 * u1; break;
+    case MM_add:
+      if (id == CTID_INT64) {
+        int64_t a = (int64_t)u0, b = (int64_t)u1;
+        if ((b > 0 && a > INT64_MAX - b) || (b < 0 && a < INT64_MIN - b)) goto overflow;
+        *up = (uint64_t)(a + b);
+      } else {
+        if (u0 + u1 < u0) goto overflow;
+        *up = u0 + u1;
+      }
+      break;
+    case MM_sub:
+      if (id == CTID_INT64) {
+        int64_t a = (int64_t)u0, b = (int64_t)u1;
+        if ((b < 0 && a > INT64_MAX + b) || (b > 0 && a < INT64_MIN + b)) goto overflow;
+        *up = (uint64_t)(a - b);
+      } else {
+        if (u0 < u1) goto overflow;
+        *up = u0 - u1;
+      }
+      break;
+    case MM_mul:
+      if (id == CTID_INT64) {
+        int64_t a = (int64_t)u0, b = (int64_t)u1;
+        if (a != 0 && b != 0) {
+           if ((a > 0 && b > 0 && a > INT64_MAX / b) ||
+               (a > 0 && b < 0 && b < INT64_MIN / a) ||
+               (a < 0 && b > 0 && a < INT64_MIN / b) ||
+               (a < 0 && b < 0 && a < INT64_MAX / b)) goto overflow;
+        }
+        *up = (uint64_t)(a * b);
+      } else {
+        if (u1 != 0 && u0 > UINT64_MAX / u1) goto overflow;
+        *up = u0 * u1;
+      }
+      break;
     case MM_div:
       if (id == CTID_INT64)
 	*up = (uint64_t)lj_carith_divi64((int64_t)u0, (int64_t)u1);
@@ -218,6 +251,26 @@ static int carith_int64(lua_State *L, CTState *cts, CDArith *ca, MMS mm)
     }
     lj_gc_check(L);
     return 1;
+
+  overflow:
+    {
+      GCbigint *b1, *b2;
+      if (id == CTID_INT64) {
+        b1 = lj_bigint_fromint64(L, (int64_t)u0);
+      setbigintV(L, L->top++, b1);
+        b2 = lj_bigint_fromint64(L, (int64_t)u1);
+      setbigintV(L, L->top++, b2);
+      } else {
+        b1 = lj_bigint_fromuint64(L, u0);
+      setbigintV(L, L->top++, b1);
+        b2 = lj_bigint_fromuint64(L, u1);
+      setbigintV(L, L->top++, b2);
+      }
+      lj_bigint_arith(L, L->top-3, L->top-2, L->top-1, mm);
+      L->top -= 2;
+      lj_gc_check(L);
+      return 1;
+    }
   }
   return 0;
 }

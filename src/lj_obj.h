@@ -270,8 +270,9 @@ typedef const TValue cTValue;
 #define LJ_TCDATA		(~10u)
 #define LJ_TTAB			(~11u)
 #define LJ_TUDATA		(~12u)
+#define LJ_TBIGINT		(~13u)
 /* This is just the canonical number type used in some places. */
-#define LJ_TNUMX		(~13u)
+#define LJ_TNUMX		(~14u)
 
 /* Integers have itype == LJ_TISNUM doubles have itype < LJ_TISNUM */
 #if LJ_64 && !LJ_GC64
@@ -301,6 +302,13 @@ typedef const TValue cTValue;
 
 typedef uint32_t StrHash;	/* String hash value. */
 typedef uint32_t StrID;		/* String ID. */
+
+/* BigInt object. Payload follows. */
+typedef struct GCbigint {
+  GCHeader;
+  uint32_t len;
+  int32_t sign;
+} GCbigint;
 
 /* String object header. String payload follows. */
 typedef struct GCstr {
@@ -766,6 +774,7 @@ typedef union GCobj {
   GCcdata cd;
   GCtab tab;
   GCudata ud;
+  GCbigint big;
 } GCobj;
 
 /* Macros to convert a GCobj pointer into a specific value. */
@@ -777,6 +786,7 @@ typedef union GCobj {
 #define gco2cd(o)	check_exp((o)->gch.gct == ~LJ_TCDATA, &(o)->cd)
 #define gco2tab(o)	check_exp((o)->gch.gct == ~LJ_TTAB, &(o)->tab)
 #define gco2ud(o)	check_exp((o)->gch.gct == ~LJ_TUDATA, &(o)->ud)
+#define gco2big(o)	check_exp((o)->gch.gct == ~LJ_TBIGINT, &(o)->big)
 
 /* Macro to convert any collectable object into a GCobj pointer. */
 #define obj2gco(v)	((GCobj *)(v))
@@ -806,6 +816,7 @@ typedef union GCobj {
 #define tviscdata(o)	(itype(o) == LJ_TCDATA)
 #define tvistab(o)	(itype(o) == LJ_TTAB)
 #define tvisudata(o)	(itype(o) == LJ_TUDATA)
+#define tvisbigint(o)	(itype(o) == LJ_TBIGINT)
 #define tvisnumber(o)	(itype(o) <= LJ_TISNUM)
 #define tvisint(o)	(LJ_DUALNUM && itype(o) == LJ_TISNUM)
 #define tvisnum(o)	(itype(o) < LJ_TISNUM)
@@ -870,6 +881,7 @@ static LJ_AINLINE void *lightudV(global_State *g, cTValue *o)
 #define cdataV(o)	check_exp(tviscdata(o), &gcval(o)->cd)
 #define tabV(o)		check_exp(tvistab(o), &gcval(o)->tab)
 #define udataV(o)	check_exp(tvisudata(o), &gcval(o)->ud)
+#define bigintV(o)	check_exp(tvisbigint(o), &gcval(o)->big)
 #define numV(o)		check_exp(tvisnum(o), (o)->n)
 #define intV(o)		check_exp(tvisint(o), (int32_t)(o)->i)
 
@@ -948,6 +960,7 @@ define_setV(setfuncV, GCfunc, LJ_TFUNC)
 define_setV(setcdataV, GCcdata, LJ_TCDATA)
 define_setV(settabV, GCtab, LJ_TTAB)
 define_setV(setudataV, GCudata, LJ_TUDATA)
+define_setV(setbigintV, GCbigint, LJ_TBIGINT)
 
 #define setnumV(o, x)		((o)->n = (x))
 #define setnanV(o)		((o)->u64 = U64x(fff80000,00000000))
