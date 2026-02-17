@@ -240,6 +240,18 @@ TValue *lj_meta_arith(lua_State *L, TValue *ra, cTValue *rb, cTValue *rc,
   }
 }
 
+/* Helper for arithmetic instructions with BigInt automatic conversion. */
+TValue *lj_meta_arith_bigint(lua_State *L, TValue *ra, cTValue *rb, cTValue *rc,
+		      BCReg op)
+{
+  MMS mm = bcmode_mm(op);
+  /* Force BigInt arithmetic. lj_bigint_arith handles conversion. */
+  if (lj_bigint_arith(L, ra, rb, rc, mm)) return NULL;
+
+  /* Fallback to standard meta arithmetic if BigInt conversion/arithmetic fails. */
+  return lj_meta_arith(L, ra, rb, rc, op);
+}
+
 /* Helper for CAT. Coercion, iterative concat, __concat metamethod. */
 TValue *lj_meta_cat(lua_State *L, TValue *top, int left)
 {

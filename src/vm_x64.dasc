@@ -370,6 +370,9 @@
 |.macro sseconst_2p52, reg, tmp		// Synthesize 2^52.
 |  sseconst_hi reg, tmp, 43300000
 |.endmacro
+|.macro sseconst_2p53, reg, tmp		// Synthesize 2^53.
+|  sseconst_hi reg, tmp, 43400000
+|.endmacro
 |.macro sseconst_tobit, reg, tmp	// Synthesize 2^52 + 2^51.
 |  sseconst_hi reg, tmp, 43380000
 |.endmacro
@@ -1071,6 +1074,60 @@ static void build_subroutines(BuildCtx *ctx)
   |  lea PC, [RC+FRAME_CONT]
   |  mov NARGS:RDd, 2+1			// 2 args for func(o1, o2).
   |  jmp ->vm_call_dispatch
+  |
+  |->vmeta_arith_bigint:
+  |  movzx RDd, PC_OP
+  |  sub RDd, BC_ADDVN
+  |  cmp RDd, BC_ADDNV-BC_ADDVN
+  |  jb >1 // VN
+  |  cmp RDd, BC_ADDVV-BC_ADDVN
+  |  jb >2 // NV
+  |  // VV
+  |  movzx RCd, PC_RC
+  |  lea RC, [BASE+RC*8]
+  |  movzx RBd, PC_RB
+  |  lea RB, [BASE+RB*8]
+  |  jmp >3
+  |1: // VN
+  |  movzx RCd, PC_RC
+  |  lea RC, [KBASE+RC*8]
+  |  movzx RBd, PC_RB
+  |  lea RB, [BASE+RB*8]
+  |  jmp >3
+  |2: // NV
+  |  movzx RCd, PC_RC
+  |  movzx RBd, PC_RB
+  |  lea TMPR, [KBASE+RC*8]
+  |  lea RC, [BASE+RB*8]
+  |  mov RB, TMPR
+  |3:
+  |  movzx RAd, PC_RA
+  |  lea RA, [BASE+RA*8]
+  |.if X64WIN
+  |  mov CARG3, RB
+  |  mov CARG4, RC
+  |  movzx RCd, PC_OP
+  |  mov ARG5d, RCd
+  |  mov L:RB, SAVE_L
+  |  mov L:RB->base, BASE
+  |  mov CARG2, RA
+  |  mov CARG1, L:RB
+  |.else
+  |  movzx CARG5d, PC_OP
+  |  mov CARG2, RA
+  |  mov CARG4, RC
+  |  mov L:CARG1, SAVE_L
+  |  mov L:CARG1->base, BASE
+  |  mov CARG3, RB
+  |  mov L:RB, L:CARG1
+  |.endif
+  |  mov SAVE_PC, PC
+  |  call extern lj_meta_arith_bigint
+  |  mov BASE, L:RB->base
+  |  test rax, rax
+  |  jz ->cont_nop
+  |  mov RC, rax
+  |  jmp ->vmeta_binop
   |
   |->vmeta_len:
   |  movzx RDd, PC_RD
@@ -3459,6 +3516,12 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |
     |.macro ins_arith, sseins
     |  ins_arithpre sseins, xmm0
+    |  sseconst_2p53 xmm1, TMPR
+    |  movaps xmm2, xmm0
+    |  sseconst_abs xmm3, TMPR
+    |  andpd xmm2, xmm3
+    |  ucomisd xmm2, xmm1
+    |  jae ->vmeta_arith_bigint
     |  ins_arithpost
     |  ins_next
     |.endmacro
