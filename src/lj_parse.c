@@ -1282,6 +1282,10 @@ static MSize var_lookup_(FuncState *fs, LexState *ls, GCstr *name, ExpDesc *e, i
       MSize vidx;
       if (gi && gi->vscope >= fs->vbase)
 	goto global_lookup;  /* Global in this function shadows outer variables. */
+      if (fs->prev == NULL && name == ls->envn) { /* Main chunk has _ENV as upvalue 0. */
+	expr_init(e, VUPVAL, 0);
+	return 0;
+      }
       vidx = var_lookup_(fs->prev, ls, name, e, flags & ~VARLOOKUP_FIRST);  /* Var in outer func? */
       if ((int32_t)vidx >= 0) {  /* Yes, make it an upvalue here. */
 	e->u.s.info = (uint8_t)var_lookup_uv(fs, vidx, e);
@@ -1295,6 +1299,7 @@ static MSize var_lookup_(FuncState *fs, LexState *ls, GCstr *name, ExpDesc *e, i
       ExpDesc env;
       if ((int32_t)var_lookup_(ls->fs, ls, ls->envn, &env, VARLOOKUP_FIRST|VARLOOKUP_NOERR) >= 0) {
 	ExpDesc key;
+	expr_toanyreg(ls->fs, &env);
 	expr_init(&key, VKSTR, 0);
 	key.u.sval = name;
 	expr_index(ls->fs, &env, &key);
@@ -2493,6 +2498,10 @@ static void parse_global(LexState *ls)
     }
     parse_body(ls, &b, 0, ls->linenumber);
     bcemit_store(ls->fs, &v, &b);
+    if (v.k == VINDEXED) {
+      v.k = VNONRELOC;
+      expr_free(ls->fs, &v);
+    }
   } else {  /* Global variable declaration. */
     ExpDesc e;
     BCReg nexps, nvars = 0;
@@ -2523,6 +2532,7 @@ static void parse_global(LexState *ls)
 	  ExpDesc v, rhs, env;
 	  if ((int32_t)var_lookup_(ls->fs, ls, ls->envn, &env, VARLOOKUP_FIRST|VARLOOKUP_NOERR) >= 0) {
 	    ExpDesc key;
+	    expr_toanyreg(ls->fs, &env);
 	    expr_init(&key, VKSTR, 0);
 	    key.u.sval = strref(ls->gstack[gbase+i].name);
 	    expr_index(ls->fs, &env, &key);
@@ -2532,7 +2542,16 @@ static void parse_global(LexState *ls)
 	    v.u.sval = strref(ls->gstack[gbase+i].name);
 	  }
 	  expr_init(&rhs, VNONRELOC, base+i);
-	  bcemit_store(ls->fs, &v, &rhs);
+	  if (v.k == VINDEXED) {
+	    bcreg_reserve(ls->fs, 1);
+	    bcemit_AD(ls->fs, BC_MOV, ls->fs->freereg-1, rhs.u.s.info);
+	    rhs.u.s.info = ls->fs->freereg-1;
+	    bcemit_store(ls->fs, &v, &rhs);
+	    v.k = VNONRELOC;
+	    expr_free(ls->fs, &v);
+	  } else {
+	    bcemit_store(ls->fs, &v, &rhs);
+	  }
 	  ls->gstack[gbase+i].info = flags[i] & ~VSTACK_PENDING_CONST;
 	}
 	ls->fs->freereg = base;
