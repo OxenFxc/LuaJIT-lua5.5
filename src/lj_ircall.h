@@ -198,6 +198,13 @@ typedef struct CCallInfo {
   _(ANY,	lj_mem_newgco,		2,  FA, PGC, CCI_L|CCI_T) \
   _(ANY,	lj_prng_u64d,		1,  FS, NUM, CCI_CASTU64) \
   _(ANY,	lj_vm_modi,		2,  FN, INT, 0) \
+  _(ANY,	lj_bigint_fromnumber,	1,  FS, PGC, CCI_L|CCI_T) \
+  _(ANY,	lj_bigint_fromint64,	1,  FS, PGC, XA_64|CCI_L|CCI_T) \
+  _(ANY,	lj_bigint_fromuint64,	1,  FS, PGC, XA_64|CCI_L|CCI_T) \
+  _(ANY,	lj_bigint_add,		2,  FS, PGC, CCI_L|CCI_T) \
+  _(ANY,	lj_bigint_sub,		2,  FS, PGC, CCI_L|CCI_T) \
+  _(ANY,	lj_bigint_mul,		2,  FS, PGC, CCI_L|CCI_T) \
+  _(ANY,	lj_bigint_rawcompare,	2,   N, INT, 0) \
   _(ANY,	log10,			1,   N, NUM, XA_FP) \
   _(ANY,	exp,			1,   N, NUM, XA_FP) \
   _(ANY,	sin,			1,   N, NUM, XA_FP) \

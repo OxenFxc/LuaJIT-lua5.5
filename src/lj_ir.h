@@ -322,7 +322,7 @@ LJ_DATA const uint8_t lj_ir_mode[IR__MAX+1];
   _(NIL, 4) _(FALSE, 4) _(TRUE, 4) _(LIGHTUD, LJ_64 ? 8 : 4) \
   _(STR, IRTSIZE_PGC) _(P32, 4) _(THREAD, IRTSIZE_PGC) _(PROTO, IRTSIZE_PGC) \
   _(FUNC, IRTSIZE_PGC) _(P64, 8) _(CDATA, IRTSIZE_PGC) _(TAB, IRTSIZE_PGC) \
-  _(UDATA, IRTSIZE_PGC) \
+  _(UDATA, IRTSIZE_PGC) _(BIGINT, IRTSIZE_PGC) \
   _(FLOAT, 4) _(NUM, 8) _(I8, 1) _(U8, 1) _(I16, 2) _(U16, 2) \
   _(INT, 4) _(U32, 4) _(I64, 8) _(U64, 8) \
   _(SOFTFP, 4)  /* There is room for 8 more types. */
@@ -518,6 +518,7 @@ typedef uint32_t TRef;
 #define tref_iscdata(tr)	(tref_istype((tr), IRT_CDATA))
 #define tref_istab(tr)		(tref_istype((tr), IRT_TAB))
 #define tref_isudata(tr)	(tref_istype((tr), IRT_UDATA))
+#define tref_isbigint(tr)	(tref_istype((tr), IRT_BIGINT))
 #define tref_isnum(tr)		(tref_istype((tr), IRT_NUM))
 #define tref_isint(tr)		(tref_istype((tr), IRT_INT))
 
