@@ -25,7 +25,6 @@
 #include "lj_lex.h"
 #include "lj_bcdump.h"
 #include "lj_lib.h"
-#include "lj_bigint.h"
 
 /* -- Library initialization ---------------------------------------------- */
 
@@ -229,12 +228,8 @@ lua_Number lj_lib_checknum(lua_State *L, int narg)
 {
   TValue *o = L->base + narg-1;
   if (!(o < L->top &&
-	(tvisnumber(o) || (tvisstr(o) && lj_strscan_num(strV(o), o))))) {
-    if (o < L->top && tvisbigint(o)) {
-      return lj_bigint_tonumber(L, bigintV(o));
-    }
+	(tvisnumber(o) || (tvisstr(o) && lj_strscan_num(strV(o), o)))))
     lj_err_argt(L, narg, LUA_TNUMBER);
-  }
   if (LJ_UNLIKELY(tvisint(o))) {
     lua_Number n = (lua_Number)intV(o);
     setnumV(o, n);
@@ -247,12 +242,8 @@ lua_Number lj_lib_checknum(lua_State *L, int narg)
 int32_t lj_lib_checkint(lua_State *L, int narg)
 {
   TValue *o = L->base + narg-1;
-  if (!(o < L->top && lj_strscan_numberobj(o))) {
-    if (o < L->top && tvisbigint(o)) {
-      return (int32_t)lj_bigint_toint64(L, bigintV(o));
-    }
+  if (!(o < L->top && lj_strscan_numberobj(o)))
     lj_err_argt(L, narg, LUA_TNUMBER);
-  }
   if (LJ_LIKELY(tvisint(o))) {
     return intV(o);
   } else {

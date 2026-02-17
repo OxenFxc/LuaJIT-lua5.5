@@ -225,14 +225,9 @@ LJLIB_CF(math_ult)
 
 LJLIB_CF(math_type)
 {
-  if (L->base < L->top) {
-    if (tvisnumber(L->base)) {
-      lua_pushstring(L, tvisint(L->base) ? "integer" : "float");
-      return 1;
-    } else if (tvisbigint(L->base)) {
-      lua_pushliteral(L, "integer");
-      return 1;
-    }
+  if (L->base < L->top && tvisnumber(L->base)) {
+    lua_pushstring(L, tvisint(L->base) ? "integer" : "float");
+    return 1;
   }
   lj_lib_checkany(L, 1);
   lua_pushnil(L);

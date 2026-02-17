@@ -402,10 +402,6 @@ int lj_strfmt_putarg(lua_State *L, SBuf *sb, int arg, int retry)
 	  }
 	}
 #endif
-	if (tvisbigint(o)) {
-	  lj_strfmt_putfxint(sb, sf, (uint64_t)lj_bigint_toint64(L, bigintV(o)));
-	  break;
-	}
 	lj_strfmt_putfnum_int(sb, sf, lj_lib_checknum(L, arg));
 	break;
       case STRFMT_UINT:
@@ -422,10 +418,6 @@ int lj_strfmt_putarg(lua_State *L, SBuf *sb, int arg, int retry)
 	  }
 	}
 #endif
-	if (tvisbigint(o)) {
-	  lj_strfmt_putfxint(sb, sf, (uint64_t)lj_bigint_toint64(L, bigintV(o)));
-	  break;
-	}
 	lj_strfmt_putfnum_uint(sb, sf, lj_lib_checknum(L, arg));
 	break;
       case STRFMT_NUM:
