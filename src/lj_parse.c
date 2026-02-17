@@ -1324,6 +1324,7 @@ static MSize var_lookup_(FuncState *fs, LexState *ls, GCstr *name, ExpDesc *e, i
     }
     expr_init(e, VGLOBAL, 0);
     e->u.sval = name;
+	const_str(fs, e);  /* Add global variable name to constant table */
   }
   return (MSize)-1;  /* Global. */
 }
