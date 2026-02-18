@@ -23,6 +23,7 @@
 
 #include "lauxlib.h"
 #include "llimits.h"
+#include "lj_arch.h"
 
 
 /*
@@ -676,7 +677,12 @@ LUALIB_API unsigned int luaL_makeseed (lua_State *L) {
 ** as a macro.
 */
 LUALIB_API lua_State *(luaL_newstate) (void) {
-  lua_State *L = lua_newstate(luaL_alloc, NULL, luaL_makeseed(NULL));
+  lua_Alloc f = luaL_alloc;
+  void *ud = NULL;
+#if !defined(LUAJIT_USE_SYSMALLOC)
+  f = (lua_Alloc)(void *)(size_t)(1237<<4);
+#endif
+  lua_State *L = lua_newstate(f, ud, luaL_makeseed(NULL));
   if (l_likely(L)) {
     lua_atpanic(L, &panic);
     lua_setwarnf(L, warnfon, L);
