@@ -269,7 +269,6 @@ static int iter_auxstrict (lua_State *L) {
 }
 #endif
 
-
 #ifndef iter_auxlax
 static int iter_auxlax (lua_State *L) {
   return iter_aux(L, 0);
