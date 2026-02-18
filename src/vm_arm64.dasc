@@ -2804,8 +2804,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  cbz CARG2w, target
     |.endmacro
     |
-    |.macro ins_arithhead_base, base_op
-    ||vk = ((int)op - base_op) / (BC_ADDNV-BC_ADDVN);
+    |.macro ins_arithhead_base, base_op, stride
+    ||vk = ((int)op - base_op) / stride;
     ||if (vk == 1) {
     |   and RC, RC, #255
     |    decode_RB RB, INS
@@ -2816,7 +2816,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |.endmacro
     |
     |.macro ins_arithhead
-    |  ins_arithhead_base BC_ADDVN
+    |  ins_arithhead_base BC_ADDVN, (BC_ADDNV-BC_ADDVN)
     |.endmacro
     |
     |.macro ins_arithload, reg1, reg2
@@ -2840,13 +2840,13 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |.macro ins_arithfallback, ins
     ||switch (vk) {
     ||case 0:
-    |   ins ->vmeta_arith_vn
+    |   ins >1; b >2; 1:; b ->vmeta_arith_vn; 2:
     ||  break;
     ||case 1:
-    |   ins ->vmeta_arith_nv
+    |   ins >1; b >2; 1:; b ->vmeta_arith_nv; 2:
     ||  break;
     ||default:
-    |   ins ->vmeta_arith_vv
+    |   ins >1; b >2; 1:; b ->vmeta_arith_vv; 2:
     ||  break;
     ||}
     |.endmacro
@@ -2859,8 +2859,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  fsub res, reg1, d2
     |.endmacro
     |
-    |.macro ins_arithdn_base, intins, fpins, base_op
-    |  ins_arithhead_base base_op
+    |.macro ins_arithdn_base, intins, fpins, base_op, stride
+    |  ins_arithhead_base base_op, stride
     |  ins_arithload CARG1, CARG2
     |  ins_arithcheck_int >5
     |.if "intins" == "smull"
@@ -2896,7 +2896,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |.endmacro
     |
     |.macro ins_arithdn, intins, fpins
-    |  ins_arithdn_base intins, fpins, BC_ADDVN
+    |  ins_arithdn_base intins, fpins, BC_ADDVN, (BC_ADDNV-BC_ADDVN)
     |.endmacro
     |
     |.macro ins_arithfp, fpins
@@ -2926,7 +2926,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ins_arithfp fdiv
     break;
   case BC_IDIVVN: case BC_IDIVNV: case BC_IDIVVV:
-    |  ins_arithdn_base ins_arithidivi, call_vm_idiv, BC_IDIVVN
+    |  ins_arithdn_base ins_arithidivi, call_vm_idiv, BC_IDIVVN, (BC_IDIVNV-BC_IDIVVN)
     break;
   case BC_MODVN: case BC_MODNV: case BC_MODVV:
     |  ins_arithdn ins_arithmodi, ins_arithmod
@@ -2937,7 +2937,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     break;
 
     |.macro ins_bit, intins, fphelper, base_op
-    |  ins_arithhead_base base_op
+    |  ins_arithhead_base base_op, 1
     |  ins_arithload CARG1, CARG2
     |  checkint CARG1, >5
     |  checkint CARG2, >6
