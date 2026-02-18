@@ -2140,6 +2140,23 @@ static void build_subroutines(BuildCtx *ctx)
   |//-- Math helper functions ----------------------------------------------
   |//-----------------------------------------------------------------------
   |
+  |// FP integer division. Called by BC_IDIV* and vm_arith.
+  |->vm_idiv:
+  |  fdiv d0, d0, d1
+  |  b ->vm_floor
+  |
+  |  // int lj_vm_idivi(int dividend, int divisor);
+  |->vm_idivi:
+  |  bti_call
+  |  sdiv CARG3w, CARG1w, CARG2w
+  |  msub CARG4w, CARG3w, CARG2w, CARG1w
+  |  eor CARG1w, CARG1w, CARG2w
+  |  cmp CARG4w, #0
+  |  ccmp CARG1w, #0, #0, ne
+  |  csinc CARG1w, CARG3w, CARG3w, mi
+  |  sub CARG1w, CARG1w, #1
+  |  ret
+  |
   |  // int lj_vm_modi(int dividend, int divisor);
   |->vm_modi:
   |  bti_call
@@ -2194,6 +2211,30 @@ static void build_subroutines(BuildCtx *ctx)
   |  fadd FARG1, FARG1, FARG2
   |  fmov CRET1w, s0
   |  ret
+  |
+  |// Bitwise helpers.
+  |.macro vm_bit, name, op, shift
+  |->name:
+  |  movz TMP0, #0x4338, lsl #48
+  |  fmov d2, TMP0
+  |  fadd d0, d0, d2
+  |  fadd d1, d1, d2
+  |  fmov CRET1w, s0
+  |  fmov CARG2w, s1
+  |.if shift
+  |  op CRET1w, CRET1w, CARG2w
+  |.else
+  |  op CRET1w, CRET1w, CARG2w
+  |.endif
+  |  scvtf d0, CRET1w
+  |  ret
+  |.endmacro
+  |
+  |  vm_bit vm_bit_band, and, 0
+  |  vm_bit vm_bit_bor,  orr,  0
+  |  vm_bit vm_bit_bxor, eor, 0
+  |  vm_bit vm_bit_shl,  lsl, 1
+  |  vm_bit vm_bit_shr,  lsr, 1
   |
   |//-----------------------------------------------------------------------
   |//-- Miscellaneous functions --------------------------------------------
@@ -2693,6 +2734,26 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  str TMP0, [BASE, RA, lsl #3]
     |  ins_next
     break;
+  case BC_BNOT:
+    |  // RA = dst, RC = src
+    |  ldr CARG1, [BASE, RC, lsl #3]
+    |  checkint CARG1, >1
+    |  mvn CARG1w, CARG1w
+    |  add_TISNUM CARG1, CARG1
+    |  str CARG1, [BASE, RA, lsl #3]
+    |  ins_next
+    |1:
+    |  asr ITYPE, CARG1, #47
+    |  cmn ITYPE, #-LJ_TISNUM
+    |  bhi ->vmeta_unm
+    |  fmov d0, CARG1
+    |  bl ->vm_tobit
+    |  mvn CRET1w, CRET1w
+    |  scvtf d0, CRET1w
+    |  str d0, [BASE, RA, lsl #3]
+    |  ins_next
+    break;
+
   case BC_LEN:
     |  // RA = dst, RC = src
     |  ldr CARG1, [BASE, RC, lsl #3]
@@ -2743,8 +2804,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  cbz CARG2w, target
     |.endmacro
     |
-    |.macro ins_arithhead
-    ||vk = ((int)op - BC_ADDVN) / (BC_ADDNV-BC_ADDVN);
+    |.macro ins_arithhead_base, base_op
+    ||vk = ((int)op - base_op) / (BC_ADDNV-BC_ADDVN);
     ||if (vk == 1) {
     |   and RC, RC, #255
     |    decode_RB RB, INS
@@ -2752,6 +2813,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |   decode_RB RB, INS
     |    and RC, RC, #255
     ||}
+    |.endmacro
+    |
+    |.macro ins_arithhead
+    |  ins_arithhead_base BC_ADDVN
     |.endmacro
     |
     |.macro ins_arithload, reg1, reg2
@@ -2794,8 +2859,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  fsub res, reg1, d2
     |.endmacro
     |
-    |.macro ins_arithdn, intins, fpins
-    |  ins_arithhead
+    |.macro ins_arithdn_base, intins, fpins, base_op
+    |  ins_arithhead_base base_op
     |  ins_arithload CARG1, CARG2
     |  ins_arithcheck_int >5
     |.if "intins" == "smull"
@@ -2806,6 +2871,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |.elif "intins" == "ins_arithmodi"
     |  ins_arithfallback ins_arithcheck_nzdiv
     |  bl ->vm_modi
+    |.elif "intins" == "ins_arithidivi"
+    |  ins_arithfallback ins_arithcheck_nzdiv
+    |  bl ->vm_idivi
     |.else
     |  intins CARG1w, CARG1w, CARG2w
     |  ins_arithfallback bvs
@@ -2818,9 +2886,17 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |5:  // FP variant.
     |  ins_arithload FARG1, FARG2
     |  ins_arithfallback ins_arithcheck_num
+    |.if "fpins" == "call_vm_idiv"
+    |  bl ->vm_idiv
+    |.else
     |  fpins FARG1, FARG1, FARG2
+    |.endif
     |  str FARG1, [BASE, RA, lsl #3]
     |  b <4
+    |.endmacro
+    |
+    |.macro ins_arithdn, intins, fpins
+    |  ins_arithdn_base intins, fpins, BC_ADDVN
     |.endmacro
     |
     |.macro ins_arithfp, fpins
@@ -2849,12 +2925,64 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
   case BC_DIVVN: case BC_DIVNV: case BC_DIVVV:
     |  ins_arithfp fdiv
     break;
+  case BC_IDIVVN: case BC_IDIVNV: case BC_IDIVVV:
+    |  ins_arithdn_base ins_arithidivi, call_vm_idiv, BC_IDIVVN
+    break;
   case BC_MODVN: case BC_MODNV: case BC_MODVV:
     |  ins_arithdn ins_arithmodi, ins_arithmod
     break;
   case BC_POW:
     |  // NYI: (partial) integer arithmetic.
     |  ins_arithfp fpow
+    break;
+
+    |.macro ins_bit, intins, fphelper, base_op
+    |  ins_arithhead_base base_op
+    |  ins_arithload CARG1, CARG2
+    |  checkint CARG1, >5
+    |  checkint CARG2, >6
+    |  intins CARG1w, CARG1w, CARG2w
+    |  add_TISNUM CARG1, CARG1
+    |  str CARG1, [BASE, RA, lsl #3]
+    |4:
+    |  ins_next
+    |
+    |5:  // CARG1 not int.
+    |  ins_arithfallback bhi
+    |  fmov d0, CARG1
+    |  b >7
+    |
+    |6:  // CARG2 not int. CARG1 is int.
+    |  ins_arithfallback bhi
+    |  scvtf d0, CARG1w
+    |
+    |7:
+    |  checkint CARG2, >8
+    |  scvtf d1, CARG2w
+    |  b >9
+    |8:
+    |  ins_arithfallback bhi
+    |  fmov d1, CARG2
+    |9:
+    |  bl ->fphelper
+    |  str d0, [BASE, RA, lsl #3]
+    |  b <4
+    |.endmacro
+
+  case BC_BANDVN: case BC_BANDNV: case BC_BANDVV:
+    |  ins_bit and, vm_bit_band, BC_BANDVN
+    break;
+  case BC_BORVN: case BC_BORNV: case BC_BORVV:
+    |  ins_bit orr, vm_bit_bor, BC_BORVN
+    break;
+  case BC_BXORVN: case BC_BXORNV: case BC_BXORVV:
+    |  ins_bit eor, vm_bit_bxor, BC_BXORVN
+    break;
+  case BC_SHLVN: case BC_SHLNV: case BC_SHLVV:
+    |  ins_bit lsl, vm_bit_shl, BC_SHLVN
+    break;
+  case BC_SHRVN: case BC_SHRNV: case BC_SHRVV:
+    |  ins_bit lsr, vm_bit_shr, BC_SHRVN
     break;
 
   case BC_CAT:
@@ -3037,6 +3165,16 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  bl extern lj_func_closeuv	// (lua_State *L, TValue *level)
     |  ldr BASE, L->base
     |1:
+    |  ins_next
+    break;
+
+  case BC_TBC:
+    |  // RA = var, RD = unused
+    |  str BASE, L->base
+    |  add CARG2, BASE, RA, lsl #3
+    |  mov CARG1, L
+    |  bl extern lj_func_newtbc	// (lua_State *L, TValue *slot)
+    |  ldr BASE, L->base
     |  ins_next
     break;
 

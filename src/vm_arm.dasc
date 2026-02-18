@@ -2416,6 +2416,32 @@ static void build_subroutines(BuildCtx *ctx)
   |  pop {pc}
   |.endif
   |
+  |// FP integer division. Called by BC_IDIV* and vm_arith.
+  |->vm_idiv:
+  |.if FPU
+  |  vdiv.f64 d0, d0, d1
+  |  b ->vm_floor
+  |.else
+  |  push {lr}
+  |  bl extern __aeabi_ddiv
+  |  bl ->vm_floor
+  |  pop {pc}
+  |.endif
+  |
+  |  // int lj_vm_idivi(int dividend, int divisor);
+  |->vm_idivi:
+  |  push {r4, r5, lr}
+  |  mov r4, CARG1
+  |  mov r5, CARG2
+  |  bl extern __aeabi_idiv
+  |  mul CARG3, CARG1, r5
+  |  sub CARG3, r4, CARG3
+  |  eor r4, r4, r5
+  |  cmp CARG3, #0
+  |  cmpne r4, #0
+  |  submi CARG1, CARG1, #1
+  |  pop {r4, r5, pc}
+  |
   |  // int lj_vm_modi(int dividend, int divisor);
   |->vm_modi:
   |  ands RB, CARG1, #0x80000000
@@ -2562,6 +2588,59 @@ static void build_subroutines(BuildCtx *ctx)
   |9:
   |  .long 0, 0x43380000		// (double)(2^52 + 2^51).
   |.endif
+  |
+  |// Bitwise helpers.
+  |.macro vm_bit, name, op, shift
+  |->name:
+  |.if FPU
+  |  vldr d2, <9
+  |.if not HFABI
+  |  vmov d0, CARG1, CARG2
+  |  vmov d1, CARG3, CARG4
+  |.endif
+  |  vadd.f64 d0, d0, d2
+  |  vadd.f64 d1, d1, d2
+  |  vmov CARG1, s0
+  |  vmov CARG2, s2
+  |.if shift
+  |  op CARG1, CARG1, CARG2
+  |.else
+  |  op CARG1, CARG1, CARG2
+  |.endif
+  |  vmov s0, CARG1
+  |  vcvt.f64.s32 d0, s0
+  |.if not HFABI
+  |  vmov CARG1, CARG2, d0
+  |.endif
+  |  bx lr
+  |.else
+  |  push {r4, r5, lr}
+  |  mov r4, CARG1
+  |  mov r5, CARG2
+  |  mov CARG1, CARG3
+  |  mov CARG2, CARG4
+  |  bl ->vm_tobit
+  |  mov CARG3, CARG1
+  |  mov CARG1, r4
+  |  mov CARG2, r5
+  |  push {CARG3}
+  |  bl ->vm_tobit
+  |  pop {CARG2}
+  |.if shift
+  |  op CARG1, CARG1, CARG2
+  |.else
+  |  op CARG1, CARG1, CARG2
+  |.endif
+  |  bl extern __aeabi_i2d
+  |  pop {r4, r5, pc}
+  |.endif
+  |.endmacro
+  |
+  |  vm_bit vm_bit_band, and, 0
+  |  vm_bit vm_bit_bor,  orr,  0
+  |  vm_bit vm_bit_bxor, eor, 0
+  |  vm_bit vm_bit_shl,  lsl, 1
+  |  vm_bit vm_bit_shr,  lsr, 1
   |
   |//-----------------------------------------------------------------------
   |//-- Miscellaneous functions --------------------------------------------
@@ -3138,6 +3217,27 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |9:
     |  .long 0x00000000, 0x41e00000	// 2^31.
     break;
+  case BC_BNOT:
+    |  // RA = dst*8, RC = src
+    |  lsl RC, RC, #3
+    |  ldrd CARG12, [BASE, RC]
+    |  checktp CARG2, LJ_TISNUM
+    |  bne >1
+    |  mvn CARG1, CARG1
+    |  ins_next1
+    |  ins_next2
+    |  strd CARG12, [BASE, RA]
+    |   ins_next3
+    |1:
+    |  bhs ->vmeta_unm
+    |  bl ->vm_tobit
+    |  mvn CARG1, CARG1
+    |  bl extern __aeabi_i2d
+    |  mvn CARG2, #~LJ_TISNUM
+    |  strd CARG12, [BASE, RA]
+    |  ins_next
+    break;
+
   case BC_LEN:
     |  // RA = dst*8, RC = src
     |  lsl RC, RC, #3
@@ -3192,11 +3292,11 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ins_arithcheck lo, hs, target
     |.endmacro
     |
-    |.macro ins_arithpre
+    |.macro ins_arithpre_base, base_op
     |  decode_RB8 RB, INS
     |   decode_RC8 RC, INS
     |  // RA = dst*8, RB = src1*8, RC = src2*8 | num_const*8
-    ||vk = ((int)op - BC_ADDVN) / (BC_ADDNV-BC_ADDVN);
+    ||vk = ((int)op - base_op) / (BC_ADDNV-BC_ADDVN);
     ||switch (vk) {
     ||case 0:
     |   .if FPU
@@ -3226,6 +3326,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |   .endif
     ||  break;
     ||}
+    |.endmacro
+    |
+    |.macro ins_arithpre
+    |  ins_arithpre_base BC_ADDVN
     |.endmacro
     |
     |.macro ins_arithpre_fpu, reg1, reg2
@@ -3262,8 +3366,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     ||}
     |.endmacro
     |
-    |.macro ins_arithdn, intins, fpins, fpcall
-    |  ins_arithpre
+    |.macro ins_arithdn_base, intins, fpins, fpcall, base_op
+    |  ins_arithpre_base base_op
     |.if "intins" ~= "vm_modi" and not FPU
     |   ins_next1
     |.endif
@@ -3276,6 +3380,11 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  movs CARG2, CARG3
     |  ins_arithfallback beq
     |  bl ->vm_modi
+    |  mvn CARG2, #~LJ_TISNUM
+    |.elif "intins" == "vm_idivi"
+    |  movs CARG2, CARG3
+    |  ins_arithfallback beq
+    |  bl ->vm_idivi
     |  mvn CARG2, #~LJ_TISNUM
     |.else
     |  intins CARG1, CARG1, CARG3
@@ -3292,19 +3401,30 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ins_arithpre_fpu d6, d7
     |  ins_arithfallback ins_arithcheck_num
     |.if FPU
-    |.if "intins" == "vm_modi"
+    |.if "intins" == "vm_modi" or "intins" == "vm_idivi"
+    |.if "intins" == "vm_idivi"
+    |  vmov d0, d6
+    |  vmov d1, d7
+    |.endif
     |  bl fpcall
+    |.if "intins" == "vm_idivi"
+    |  vmov d6, d0
+    |.endif
     |.else
     |  fpins d6, d6, d7
     |.endif
     |  ins_arithpost_fpu d6
     |.else
     |  bl fpcall
-    |.if "intins" ~= "vm_modi"
+    |.if "intins" ~= "vm_modi" and "intins" ~= "vm_idivi"
     |  ins_next1
     |.endif
     |  b <4
     |.endif
+    |.endmacro
+    |
+    |.macro ins_arithdn, intins, fpins, fpcall
+    |  ins_arithdn_base intins, fpins, fpcall, BC_ADDVN
     |.endmacro
     |
     |.macro ins_arithfp, fpins, fpcall
@@ -3344,12 +3464,97 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
   case BC_DIVVN: case BC_DIVNV: case BC_DIVVV:
     |  ins_arithfp vdiv.f64, extern __aeabi_ddiv
     break;
+  case BC_IDIVVN: case BC_IDIVNV: case BC_IDIVVV:
+    |  ins_arithdn_base vm_idivi, vm_idiv, ->vm_idiv, BC_IDIVVN
+    break;
   case BC_MODVN: case BC_MODNV: case BC_MODVV:
     |  ins_arithdn vm_modi, vm_mod, ->vm_mod
     break;
   case BC_POW:
     |  // NYI: (partial) integer arithmetic.
     |  ins_arithfp extern, extern pow
+    break;
+
+    |.macro ins_bit, intins, fphelper, base_op
+    |  ins_arithpre_base base_op
+    |  ins_arithcheck_int >5
+    |  intins CARG1, CARG1, CARG3
+    |  mvn CARG2, #~LJ_TISNUM
+    |  ins_next1
+    |  ins_next2
+    |  strd CARG12, [BASE, RA]
+    |  ins_next3
+    |5:
+    |  ins_arithfallback ins_arithcheck_num
+    |.if FPU
+    |  checktp CARG2, LJ_TISNUM
+    |  bne >6
+    |  vmov s0, CARG1
+    |  vcvt.f64.s32 d0, s0
+    |  b >7
+    |6:
+    |  vmov d0, CARG1, CARG2
+    |7:
+    |  checktp CARG4, LJ_TISNUM
+    |  bne >8
+    |  vmov s2, CARG3
+    |  vcvt.f64.s32 d1, s2
+    |  b >9
+    |8:
+    |  vmov d1, CARG3, CARG4
+    |9:
+    |  bl ->fphelper
+    |  ins_arithpost_fpu d0
+    |.else
+    |  checktp CARG2, LJ_TISNUM
+    |  bne >6
+    |  mov r4, CARG3
+    |  mov r5, CARG4
+    |  bl extern __aeabi_i2d
+    |  mov CARG3, r4
+    |  mov CARG4, r5
+    |  b >7
+    |6:
+    |  mov RA, CARG3
+    |  mov RB, CARG4
+    |  mov CARG3, CARG1
+    |  mov CARG4, CARG2
+    |  mov CARG1, RA
+    |  mov CARG2, RB
+    |7:
+    |  checktp CARG4, LJ_TISNUM
+    |  bne >8
+    |  mov r4, CARG1
+    |  mov r5, CARG2
+    |  mov CARG1, CARG3
+    |  bl extern __aeabi_i2d
+    |  mov CARG3, CARG1
+    |  mov CARG4, CARG2
+    |  mov CARG1, r4
+    |  mov CARG2, r5
+    |8:
+    |  bl ->fphelper
+    |  ins_next1
+    |  ins_next2
+    |  strd CARG12, [BASE, RA]
+    |  ins_next3
+    |.endif
+    |.endmacro
+
+  case BC_BANDVN: case BC_BANDNV: case BC_BANDVV:
+    |  ins_bit and, vm_bit_band, BC_BANDVN
+    break;
+  case BC_BORVN: case BC_BORNV: case BC_BORVV:
+    |  ins_bit orr, vm_bit_bor, BC_BORVN
+    break;
+  case BC_BXORVN: case BC_BXORNV: case BC_BXORVV:
+    |  ins_bit eor, vm_bit_bxor, BC_BXORVN
+    break;
+  case BC_SHLVN: case BC_SHLNV: case BC_SHLVV:
+    |  ins_bit lsl, vm_bit_shl, BC_SHLVN
+    break;
+  case BC_SHRVN: case BC_SHRNV: case BC_SHRVV:
+    |  ins_bit lsr, vm_bit_shr, BC_SHRVN
     break;
 
   case BC_CAT:
@@ -3568,6 +3773,16 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  bl extern lj_func_closeuv	// (lua_State *L, TValue *level)
     |  ldr BASE, L->base
     |1:
+    |  ins_next
+    break;
+
+  case BC_TBC:
+    |  // RA = var*8, RD = unused
+    |  str BASE, L->base
+    |  add CARG2, BASE, RA
+    |  mov CARG1, L
+    |  bl extern lj_func_newtbc	// (lua_State *L, TValue *slot)
+    |  ldr BASE, L->base
     |  ins_next
     break;
 
