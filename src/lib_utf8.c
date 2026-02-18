@@ -33,13 +33,11 @@
 
 /* from strlib */
 /* translate a relative string position: negative means back from end */
-#ifndef byteoffset
 static lua_Integer u_posrelat (lua_Integer pos, size_t len) {
   if (pos >= 0) return pos;
   else if (0u - (size_t)pos > len) return 0;
   else return (lua_Integer)len + pos + 1;
 }
-#endif
 
 
 /*
@@ -188,7 +186,6 @@ static int utfchar (lua_State *L) {
 ** offset(s, n, [i])  -> indices where n-th character counting from
 **   position 'i' starts and ends; 0 means character at 'i'.
 */
-#ifndef byteoffset
 static int byteoffset (lua_State *L) {
   size_t len;
   const char *s = luaL_checklstring(L, 1, &len);
@@ -239,7 +236,6 @@ static int byteoffset (lua_State *L) {
 }
 
 
-#ifndef iter_aux
 static int iter_aux (lua_State *L, int strict) {
   size_t len;
   const char *s = luaL_checklstring(L, 1, &len);
@@ -261,18 +257,15 @@ static int iter_aux (lua_State *L, int strict) {
 }
 
 
-#ifndef iter_auxstrict
 static int iter_auxstrict (lua_State *L) {
   return iter_aux(L, 1);
 }
 
-#ifndef iter_auxlax
 static int iter_auxlax (lua_State *L) {
   return iter_aux(L, 0);
 }
 
 
-#ifndef iter_codes
 static int iter_codes (lua_State *L) {
   int lax = lua_toboolean(L, 2);
   const char *s = luaL_checkstring(L, 1);
@@ -288,7 +281,6 @@ static int iter_codes (lua_State *L) {
 #define UTF8PATT	"[\0-\x7F\xC2-\xFD][\x80-\xBF]*"
 
 
-#ifndef funcs
 static const luaL_Reg funcs[] = {
   {"offset", byteoffset},
   {"codepoint", codepoint},
@@ -301,7 +293,6 @@ static const luaL_Reg funcs[] = {
 };
 
 
-#ifndef luaopen_utf8
 LUAMOD_API int luaopen_utf8 (lua_State *L) {
   luaL_newlib(L, funcs);
   lua_pushlstring(L, UTF8PATT, sizeof(UTF8PATT)/sizeof(char) - 1);
