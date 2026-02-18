@@ -2157,6 +2157,18 @@ static void build_subroutines(BuildCtx *ctx)
   |  sub CARG1w, CARG1w, #1
   |  ret
   |
+  |->vm_floor:
+  |  frintm d0, d0
+  |  ret
+  |
+  |->vm_ceil:
+  |  frintp d0, d0
+  |  ret
+  |
+  |->vm_trunc:
+  |  frintz d0, d0
+  |  ret
+  |
   |  // int lj_vm_modi(int dividend, int divisor);
   |->vm_modi:
   |  bti_call
@@ -2933,7 +2945,17 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     break;
   case BC_POW:
     |  // NYI: (partial) integer arithmetic.
-    |  ins_arithfp fpow
+    |  decode_RB RB, INS
+    |  decode_RC RC, INS
+    |  ldr CARG1, [BASE, RB, lsl #3]
+    |  ldr CARG2, [BASE, RC, lsl #3]
+    |  ldr FARG1, [BASE, RB, lsl #3]
+    |  ldr FARG2, [BASE, RC, lsl #3]
+    || vk = 2;
+    |  ins_arithfallback ins_arithcheck_num
+    |  bl extern pow
+    |  str FARG1, [BASE, RA, lsl #3]
+    |  ins_next
     break;
 
     |.macro ins_bit, intins, fphelper, base_op
