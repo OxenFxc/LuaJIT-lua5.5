@@ -260,6 +260,7 @@ static int iter_aux (lua_State *L, int strict) {
     return 2;
   }
 }
+#endif
 
 
 #ifndef iter_auxstrict
