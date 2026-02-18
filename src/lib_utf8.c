@@ -237,6 +237,7 @@ static int byteoffset (lua_State *L) {
   lua_pushinteger(L, posi + 1);  /* 'posi' now is the final position */
   return 2;
 }
+#endif
 
 
 #ifndef iter_aux
@@ -259,17 +260,20 @@ static int iter_aux (lua_State *L, int strict) {
     return 2;
   }
 }
+#endif
 
 
 #ifndef iter_auxstrict
 static int iter_auxstrict (lua_State *L) {
   return iter_aux(L, 1);
 }
+#endif
 
 #ifndef iter_auxlax
 static int iter_auxlax (lua_State *L) {
   return iter_aux(L, 0);
 }
+#endif
 
 
 #ifndef iter_codes
@@ -282,6 +286,7 @@ static int iter_codes (lua_State *L) {
   lua_pushinteger(L, 0);
   return 3;
 }
+#endif
 
 
 /* pattern to match a single UTF-8 character */
@@ -299,6 +304,7 @@ static const luaL_Reg funcs[] = {
   {"charpattern", NULL},
   {NULL, NULL}
 };
+#endif
 
 
 #ifndef luaopen_utf8
@@ -310,3 +316,4 @@ LUAMOD_API int luaopen_utf8 (lua_State *L) {
   lua_setglobal(L, LUA_UTF8LIBNAME);
   return 1;
 }
+#endif
