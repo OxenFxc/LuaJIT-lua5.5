@@ -68,6 +68,11 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y gcc-multilib
+
     - name: Set NDK Env
       run: |
          echo "NDKDIR=${ANDROID_NDK_HOME}" >> $GITHUB_ENV
@@ -89,7 +94,8 @@ jobs:
             exit 1
         fi
 
-        make CROSS=$NDKCROSS \
+        make HOST_CC="gcc -m32" \
+             CROSS=$NDKCROSS \
              STATIC_CC=$NDKCC \
              DYNAMIC_CC="$NDKCC -fPIC" \
              TARGET_LD=$NDKCC \
@@ -102,6 +108,7 @@ jobs:
         # Install to local directory
         mkdir -p install
         make install DESTDIR=$(pwd)/install PREFIX=/usr/local \
+             HOST_CC="gcc -m32" \
              CROSS=$NDKCROSS \
              STATIC_CC=$NDKCC \
              DYNAMIC_CC="$NDKCC -fPIC" \
