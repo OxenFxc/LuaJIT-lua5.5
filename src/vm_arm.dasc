@@ -3292,11 +3292,11 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ins_arithcheck lo, hs, target
     |.endmacro
     |
-    |.macro ins_arithpre_base, base_op
+    |.macro ins_arithpre_base, base_op, stride
     |  decode_RB8 RB, INS
     |   decode_RC8 RC, INS
     |  // RA = dst*8, RB = src1*8, RC = src2*8 | num_const*8
-    ||vk = ((int)op - base_op) / (BC_ADDNV-BC_ADDVN);
+    ||vk = ((int)op - base_op) / stride;
     ||switch (vk) {
     ||case 0:
     |   .if FPU
@@ -3329,7 +3329,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |.endmacro
     |
     |.macro ins_arithpre
-    |  ins_arithpre_base BC_ADDVN
+    |  ins_arithpre_base BC_ADDVN, (BC_ADDNV-BC_ADDVN)
     |.endmacro
     |
     |.macro ins_arithpre_fpu, reg1, reg2
@@ -3366,8 +3366,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     ||}
     |.endmacro
     |
-    |.macro ins_arithdn_base, intins, fpins, fpcall, base_op
-    |  ins_arithpre_base base_op
+    |.macro ins_arithdn_base, intins, fpins, fpcall, base_op, stride
+    |  ins_arithpre_base base_op, stride
     |.if "intins" ~= "vm_modi" and not FPU
     |   ins_next1
     |.endif
@@ -3403,12 +3403,12 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |.if FPU
     |.if "intins" == "vm_modi" or "intins" == "vm_idivi"
     |.if "intins" == "vm_idivi"
-    |  vmov d0, d6
-    |  vmov d1, d7
+    |  vmov.f64 d0, d6
+    |  vmov.f64 d1, d7
     |.endif
     |  bl fpcall
     |.if "intins" == "vm_idivi"
-    |  vmov d6, d0
+    |  vmov.f64 d6, d0
     |.endif
     |.else
     |  fpins d6, d6, d7
@@ -3424,7 +3424,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |.endmacro
     |
     |.macro ins_arithdn, intins, fpins, fpcall
-    |  ins_arithdn_base intins, fpins, fpcall, BC_ADDVN
+    |  ins_arithdn_base intins, fpins, fpcall, BC_ADDVN, (BC_ADDNV-BC_ADDVN)
     |.endmacro
     |
     |.macro ins_arithfp, fpins, fpcall
@@ -3465,7 +3465,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ins_arithfp vdiv.f64, extern __aeabi_ddiv
     break;
   case BC_IDIVVN: case BC_IDIVNV: case BC_IDIVVV:
-    |  ins_arithdn_base vm_idivi, vm_idiv, ->vm_idiv, BC_IDIVVN
+    |  ins_arithdn_base vm_idivi, vm_idiv, ->vm_idiv, BC_IDIVVN, (BC_IDIVNV-BC_IDIVVN)
     break;
   case BC_MODVN: case BC_MODNV: case BC_MODVV:
     |  ins_arithdn vm_modi, vm_mod, ->vm_mod
@@ -3476,7 +3476,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     break;
 
     |.macro ins_bit, intins, fphelper, base_op
-    |  ins_arithpre_base base_op
+    |  ins_arithpre_base base_op, 1
     |  ins_arithcheck_int >5
     |  intins CARG1, CARG1, CARG3
     |  mvn CARG2, #~LJ_TISNUM

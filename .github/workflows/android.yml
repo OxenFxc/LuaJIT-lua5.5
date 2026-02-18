@@ -62,3 +62,58 @@ jobs:
       with:
         name: luajit-android-arm64
         path: luajit-android-arm64.tar.gz
+
+  build-android-arm:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set NDK Env
+      run: |
+         echo "NDKDIR=${ANDROID_NDK_HOME}" >> $GITHUB_ENV
+         echo "NDKBIN=${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin" >> $GITHUB_ENV
+         echo "NDKCROSS=${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin/arm-linux-androideabi-" >> $GITHUB_ENV
+         echo "NDKCC=${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi21-clang" >> $GITHUB_ENV
+
+    - name: Build Android ARM
+      run: |
+        if [ -z "$NDKDIR" ]; then
+          echo "ANDROID_NDK_HOME not set. Exiting."
+          exit 1
+        fi
+
+        echo "Building with NDK at $NDKDIR"
+
+        if [ ! -f "$NDKCC" ]; then
+            echo "Compiler not found at $NDKCC"
+            exit 1
+        fi
+
+        make CROSS=$NDKCROSS \
+             STATIC_CC=$NDKCC \
+             DYNAMIC_CC="$NDKCC -fPIC" \
+             TARGET_LD=$NDKCC \
+             TARGET_AR="$NDKBIN/llvm-ar rcus" \
+             TARGET_STRIP=$NDKBIN/llvm-strip \
+             TARGET_SYS=Linux
+
+    - name: Package
+      run: |
+        # Install to local directory
+        mkdir -p install
+        make install DESTDIR=$(pwd)/install PREFIX=/usr/local \
+             CROSS=$NDKCROSS \
+             STATIC_CC=$NDKCC \
+             DYNAMIC_CC="$NDKCC -fPIC" \
+             TARGET_LD=$NDKCC \
+             TARGET_AR="$NDKBIN/llvm-ar rcus" \
+             TARGET_STRIP=$NDKBIN/llvm-strip \
+             TARGET_SYS=Linux
+
+        # Create tarball
+        tar -czvf luajit-android-arm.tar.gz -C install .
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: luajit-android-arm
+        path: luajit-android-arm.tar.gz
