@@ -2157,6 +2157,18 @@ static void build_subroutines(BuildCtx *ctx)
   |  sub CARG1w, CARG1w, #1
   |  ret
   |
+  |->vm_floor:
+  |  frintm d0, d0
+  |  ret
+  |
+  |->vm_ceil:
+  |  frintp d0, d0
+  |  ret
+  |
+  |->vm_trunc:
+  |  frintz d0, d0
+  |  ret
+  |
   |  // int lj_vm_modi(int dividend, int divisor);
   |->vm_modi:
   |  bti_call
